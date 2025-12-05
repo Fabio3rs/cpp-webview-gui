@@ -15,13 +15,17 @@ Modern C++ desktop application using [webview/webview](https://github.com/webvie
 
 ```
 ├── CMakeLists.txt          # Build configuration with auto-detection
+├── cmake/
+│   └── EmbedFile.cmake     # Embeds UI as C++ byte array (no Node.js needed)
 ├── include/
 │   ├── option_parser.hpp   # CLI argument parser (combined header)
 │   ├── option_parser_decls.hpp  # Parser declarations
 │   ├── option_parser_impl.hpp   # Parser implementation
-│   └── expected.hpp        # C++20/23 std::expected wrapper
+│   ├── expected.hpp        # C++20/23 std::expected wrapper
+│   └── embedded_resources.h     # Interface for embedded UI data
 ├── src/
 │   ├── main.cpp            # Entry point with CLI handling
+│   ├── lib.cpp             # Library code (testable)
 │   ├── dev_server.h        # Vite dev server management
 │   └── app/
 │       ├── application.h   # Main Application class
@@ -32,11 +36,13 @@ Modern C++ desktop application using [webview/webview](https://github.com/webvie
 │   ├── index.html
 │   ├── package.json
 │   ├── vite.config.js
-│   ├── postbuild.js        # Generates embedded header for production
 │   └── src/
 │       ├── App.vue         # Main Vue component
 │       ├── main.js         # Vue app entry
 │       └── style.css       # Global styles
+├── tests/                  # GoogleTest unit tests
+│   ├── CMakeLists.txt
+│   └── test.cpp
 └── .vscode/
     └── settings.json       # VS Code integration (ASAN env vars)
 ```
@@ -111,9 +117,10 @@ cmake --build build
 > 💡 **Auto-build UI**: In production mode, CMake automatically:
 > 1. Runs `npm install` to ensure dependencies are installed
 > 2. Runs `npm run build` when UI source files change
-> 3. Generates `ui/dist/index_html.h` which embeds the entire frontend as a C++ string literal
+> 3. Generates `build/generated/index_html_embedded.cpp` via `cmake/EmbedFile.cmake`
 >
-> No manual npm commands needed!
+> The embedded UI is exposed through `include/embedded_resources.h` as `embedded::index_html_str()`.
+> No extra Node.js postbuild scripts needed — pure CMake!
 
 ## 📖 CLI Options
 
@@ -154,6 +161,8 @@ COMP_LINE="app --" COMP_POINT=7 ./build/bin/app
 | Option | Default | Description |
 |--------|---------|-------------|
 | `DEV_MODE` | `ON` (Debug) | Use Vite dev server instead of embedded HTML |
+| `ENABLE_TESTS` | `ON` | Enable unit tests with GoogleTest |
+| `FETCH_GTEST` | `ON` | Auto-download GoogleTest if not found on system |
 | `ENABLE_SANITIZERS` | `ON` (Debug) | Enable ASAN/UBSAN/LSAN |
 | `ENABLE_WARNINGS` | `ON` | Enable compiler warnings |
 | `FETCHCONTENT_QUIET` | `ON` | Set to `OFF` to see FetchContent download progress |
@@ -179,6 +188,22 @@ To force re-download of dependencies:
 rm -rf .deps
 cmake -B build
 ```
+
+### UI Embedding
+
+Production builds embed the Vite-generated `index.html` directly into a C++ source file via a tiny CMake script (`cmake/EmbedFile.cmake`). No extra Node.js postbuild step needed!
+
+**How it works:**
+1. Vite builds and minifies the UI into a single `dist/index.html` (via `vite-plugin-singlefile`)
+2. CMake reads the HTML file and converts it to a C++ byte array with null terminator
+3. The generated `build/generated/index_html_embedded.cpp` is compiled into the executable
+4. Application code uses `embedded::index_html_str()` from `include/embedded_resources.h`
+
+**Benefits:**
+- ✅ 100% portable (works with any compiler/platform CMake supports)
+- ✅ No MSVC string literal limits (uses byte array, not string literal)
+- ✅ Automatic rebuild when UI sources change
+- ✅ No runtime dependencies on external files
 
 ## 🏗️ Architecture
 
