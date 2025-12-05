@@ -22,3 +22,6 @@ lerna-debug.log*
 *.njsproj
 *.sln
 *.sw?
+
+# FetchContent cache
+.deps/

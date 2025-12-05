@@ -153,25 +153,46 @@ exec \"\${SCRIPT_DIR}/app\" \"\$@\"
 endif()
 
 # ==============================================================================
-# Dependências externas (FetchContent)
+# Dependências externas
 # ==============================================================================
+# Otimização: evita re-verificar repos se já foram baixados
+set(FETCHCONTENT_UPDATES_DISCONNECTED ON CACHE BOOL "Don't update already fetched content")
+
+# Otimização: cache em diretório fixo para persistir entre rebuilds
+set(FETCHCONTENT_BASE_DIR "${CMAKE_SOURCE_DIR}/.deps" CACHE PATH "FetchContent cache directory")
+
+# Debug: mostrar progresso do FetchContent (use -DFETCHCONTENT_QUIET=OFF)
+# set(FETCHCONTENT_QUIET OFF CACHE BOOL "Show FetchContent progress")
+
 include(FetchContent)
 
-# WebView - GUI cross-platform
+# ------------------------------------------------------------------------------
+# nlohmann/json - Tenta usar do sistema, senão baixa
+# ------------------------------------------------------------------------------
+find_package(nlohmann_json 3.11 QUIET)
+if(nlohmann_json_FOUND)
+    message(STATUS "nlohmann_json ${nlohmann_json_VERSION} encontrado no sistema")
+else()
+    message(STATUS "nlohmann_json não encontrado no sistema, baixando...")
+    FetchContent_Declare(
+        json
+        GIT_REPOSITORY https://github.com/nlohmann/json
+        GIT_TAG v3.12.0
+        GIT_SHALLOW TRUE
+    )
+    FetchContent_MakeAvailable(json)
+endif()
+
+# ------------------------------------------------------------------------------
+# WebView - Sempre baixa (não tem pacote de sistema comum)
+# ------------------------------------------------------------------------------
 FetchContent_Declare(
     webview
     GIT_REPOSITORY https://github.com/webview/webview
     GIT_TAG 0.12.0
+    GIT_SHALLOW TRUE
 )
 FetchContent_MakeAvailable(webview)
-
-# nlohmann/json - Parsing JSON
-FetchContent_Declare(
-    json
-    GIT_REPOSITORY https://github.com/nlohmann/json
-    GIT_TAG v3.12.0
-)
-FetchContent_MakeAvailable(json)
 
 # ==============================================================================
 # Paths do UI

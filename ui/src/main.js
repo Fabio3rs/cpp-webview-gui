@@ -1,12 +1,5 @@
-import './style.css';
+import { createApp } from 'vue'
+import App from './App.vue'
+import './style.css'
 
-function main() {
-  const textField = document.querySelector("#text-field");
-  const sendBtn = document.querySelector("#send-btn");
-
-  sendBtn.addEventListener("click", () => {
-    window.ping(textField.value);
-  });
-}
-
-window.addEventListener('DOMContentLoaded', main);
+createApp(App).mount('#app')

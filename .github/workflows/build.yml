@@ -1,0 +1,150 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        compiler: [gcc, clang]
+        include:
+          - compiler: gcc
+            cc: gcc-13
+            cxx: g++-13
+          - compiler: clang
+            cc: clang-18
+            cxx: clang++-18
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            ninja-build \
+            libwebkit2gtk-4.1-dev \
+            ${{ matrix.compiler == 'gcc' && 'g++-13' || 'clang-18' }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install UI dependencies
+        run: npm install
+        working-directory: ui
+
+      - name: Configure CMake (Dev Mode)
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_C_COMPILER=${{ matrix.cc }} \
+            -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DDEV_MODE=ON \
+            -DENABLE_SANITIZERS=OFF
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+
+      - name: Build (Dev Mode)
+        run: cmake --build build --parallel
+
+      - name: Configure CMake (Production Mode)
+        run: |
+          rm -rf build
+          cmake -B build -G Ninja \
+            -DCMAKE_C_COMPILER=${{ matrix.cc }} \
+            -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DDEV_MODE=OFF \
+            -DENABLE_SANITIZERS=OFF
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+
+      - name: Build (Production Mode)
+        run: cmake --build build --parallel
+
+      - name: Verify executable exists
+        run: |
+          test -f build/bin/app
+          ./build/bin/app --version
+          ./build/bin/app --help
+
+  build-macos:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: brew install ninja
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install UI dependencies
+        run: npm install
+        working-directory: ui
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DDEV_MODE=OFF \
+            -DENABLE_SANITIZERS=OFF
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Verify executable exists
+        run: |
+          test -f build/bin/app
+          ./build/bin/app --version
+
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install UI dependencies
+        run: npm install
+        working-directory: ui
+
+      - name: Configure CMake
+        run: |
+          cmake -B build `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DDEV_MODE=OFF `
+            -DENABLE_SANITIZERS=OFF
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Verify executable exists
+        run: |
+          Test-Path build/bin/Release/app.exe
+          ./build/bin/Release/app.exe --version

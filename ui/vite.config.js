@@ -1,11 +1,12 @@
 import { defineConfig } from "vite"
 import { viteSingleFile } from "vite-plugin-singlefile"
+import vue from "@vitejs/plugin-vue"
 
 export default defineConfig(({ mode }) => ({
 	// ============================================================================
 	// Plugins
 	// ============================================================================
-	plugins: [viteSingleFile()],
+	plugins: [vue(), viteSingleFile()],
 
 	// ============================================================================
 	// Dev Server (para hot reload no WebView)
