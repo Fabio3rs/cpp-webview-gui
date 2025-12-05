@@ -5,7 +5,7 @@ function main() {
   const sendBtn = document.querySelector("#send-btn");
 
   sendBtn.addEventListener("click", () => {
-    window.ping(textField.value); 
+    window.ping(textField.value);
   });
 }
 

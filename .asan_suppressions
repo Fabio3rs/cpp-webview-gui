@@ -1,0 +1,41 @@
+# AddressSanitizer suppressions for GTK/WebKit/system library leaks
+# These are known false positives from system libraries
+
+# GTK and GLib
+leak:libgtk-3.so
+leak:libglib-2.0.so
+leak:libgdk-3.so
+leak:libgobject-2.0.so
+leak:libgio-2.0.so
+
+# Pango (font rendering)
+leak:libpango-1.0.so
+leak:libpangocairo-1.0.so
+leak:libpangoft2-1.0.so
+
+# Cairo (graphics)
+leak:libcairo.so
+
+# FontConfig
+leak:libfontconfig.so
+
+# WebKit
+leak:libwebkit2gtk-4.1.so
+leak:libjavascriptcoregtk-4.1.so
+
+# IBus (input method)
+leak:libibus-1.0.so
+leak:im-ibus.so
+
+# X11
+leak:libX11.so
+leak:libxcb.so
+
+# Mesa/OpenGL
+leak:libGL.so
+leak:libGLX.so
+
+# Other system libraries
+leak:libdbus-1.so
+leak:libpthread.so
+leak:libc.so

@@ -1,0 +1,14 @@
+{
+    // Variáveis de ambiente para terminais integrados
+    "terminal.integrated.env.linux": {
+        "LSAN_OPTIONS": "suppressions=${workspaceFolder}/.asan_suppressions",
+        "ASAN_OPTIONS": "detect_leaks=1"
+    },
+    "terminal.integrated.env.osx": {
+        "LSAN_OPTIONS": "suppressions=${workspaceFolder}/.asan_suppressions",
+        "ASAN_OPTIONS": "detect_leaks=1"
+    },
+    "terminal.integrated.env.windows": {
+        "ASAN_OPTIONS": "detect_leaks=0"
+    }
+}
