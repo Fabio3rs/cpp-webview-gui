@@ -6,7 +6,7 @@ project(app LANGUAGES CXX C)
 # ==============================================================================
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 # ==============================================================================
 # Diretórios de saída
@@ -15,6 +15,56 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# ==============================================================================
+# Configurações do FetchContent (deve vir antes de qualquer FetchContent_Declare)
+# ==============================================================================
+# Otimização: evita re-verificar repos se já foram baixados
+set(FETCHCONTENT_UPDATES_DISCONNECTED ON CACHE BOOL "Don't update already fetched content")
+
+# Otimização: cache em diretório fixo para persistir entre rebuilds
+set(FETCHCONTENT_BASE_DIR "${CMAKE_SOURCE_DIR}/.deps" CACHE PATH "FetchContent cache directory")
+
+option(ENABLE_TESTS "Enable tests" ON)
+
+if(ENABLE_TESTS)
+    include(CTest)
+    enable_testing()
+
+    # Optionally fetch googletest if not available on the system (useful for CI)
+    option(FETCH_GTEST "Automatically fetch googletest when not found" ON)
+
+    find_package(GTest QUIET)
+    if(GTest_FOUND)
+        message(STATUS "GTest found, enabling tests")
+        include(GoogleTest)
+    else()
+        if(FETCH_GTEST)
+            message(STATUS "GTest not found, fetching GoogleTest via FetchContent...")
+            include(FetchContent)
+            FetchContent_Declare(
+                googletest
+                GIT_REPOSITORY https://github.com/google/googletest.git
+                GIT_TAG release-1.13.0
+                GIT_SHALLOW TRUE
+            )
+            # Make available will create the targets GTest::gtest and GTest::gtest_main
+            FetchContent_MakeAvailable(googletest)
+
+            # prefer the imported targets provided by googletest
+            if(TARGET GTest::gtest_main)
+                message(STATUS "GoogleTest fetched and available")
+                include(GoogleTest)
+            else()
+                message(WARNING "GoogleTest fetched but expected targets not found; disabling tests.")
+                set(ENABLE_TESTS OFF)
+            endif()
+        else()
+            message(WARNING "GTest not found and FETCH_GTEST=OFF; tests will be disabled.")
+            set(ENABLE_TESTS OFF)
+        endif()
+    endif()
+endif()
 
 # ==============================================================================
 # Opções do projeto (defaults condicionais baseados no build type)
@@ -157,11 +207,7 @@ endif()
 # ==============================================================================
 # Dependências externas
 # ==============================================================================
-# Otimização: evita re-verificar repos se já foram baixados
-set(FETCHCONTENT_UPDATES_DISCONNECTED ON CACHE BOOL "Don't update already fetched content")
-
-# Otimização: cache em diretório fixo para persistir entre rebuilds
-set(FETCHCONTENT_BASE_DIR "${CMAKE_SOURCE_DIR}/.deps" CACHE PATH "FetchContent cache directory")
+# (Configurações de FETCHCONTENT_* foram movidas para o início do arquivo)
 
 # Debug: mostrar progresso do FetchContent (use -DFETCHCONTENT_QUIET=OFF)
 # set(FETCHCONTENT_QUIET OFF CACHE BOOL "Show FetchContent progress")
@@ -243,14 +289,45 @@ if(NOT DEV_MODE)
 endif()
 
 # ==============================================================================
-# Target principal
+# Biblioteca do projeto (código testável separado do main)
 # ==============================================================================
-set(APP_SOURCES
-    src/main.cpp
-    src/dev_server.h
+# Coleta todos os .cpp em src/ exceto main.cpp
+file(GLOB_RECURSE LIB_SOURCES "${CMAKE_SOURCE_DIR}/src/*.cpp")
+list(FILTER LIB_SOURCES EXCLUDE REGEX ".*main\\.cpp$")
+
+# Cria a biblioteca estática
+add_library(${PROJECT_NAME}_lib STATIC ${LIB_SOURCES})
+
+target_include_directories(${PROJECT_NAME}_lib PUBLIC
+    "${CMAKE_SOURCE_DIR}/src"
+    "${CMAKE_SOURCE_DIR}/include"
 )
 
-add_executable(app WIN32 ${APP_SOURCES})
+# Includes das dependências como SYSTEM (suprime warnings)
+get_target_property(WEBVIEW_INCLUDE_DIRS webview::core INTERFACE_INCLUDE_DIRECTORIES)
+get_target_property(JSON_INCLUDE_DIRS nlohmann_json::nlohmann_json INTERFACE_INCLUDE_DIRECTORIES)
+
+target_include_directories(${PROJECT_NAME}_lib SYSTEM PUBLIC
+    ${WEBVIEW_INCLUDE_DIRS}
+    ${JSON_INCLUDE_DIRS}
+)
+
+# Link das bibliotecas externas
+target_link_libraries(${PROJECT_NAME}_lib PUBLIC
+    webview::core
+    nlohmann_json::nlohmann_json
+)
+
+# Aplicar flags de warning
+target_compile_options(${PROJECT_NAME}_lib PRIVATE ${PROJECT_WARNING_FLAGS})
+
+# ==============================================================================
+# Target principal (executável)
+# ==============================================================================
+add_executable(app WIN32 src/main.cpp)
+
+# Linka contra a lib do projeto (herda includes e dependências)
+target_link_libraries(app PRIVATE ${PROJECT_NAME}_lib)
 
 # Em modo dev, define macro e não depende do UI build
 if(DEV_MODE)
@@ -266,28 +343,7 @@ else()
     message(STATUS "Modo PROD: UI será embutido no executável")
 endif()
 
-# Includes do projeto
-target_include_directories(app PRIVATE
-    "${CMAKE_SOURCE_DIR}/src"
-    "${CMAKE_SOURCE_DIR}/include"
-)
-
-# Includes das dependências como SYSTEM (suprime warnings)
-get_target_property(WEBVIEW_INCLUDE_DIRS webview::core INTERFACE_INCLUDE_DIRECTORIES)
-get_target_property(JSON_INCLUDE_DIRS nlohmann_json::nlohmann_json INTERFACE_INCLUDE_DIRECTORIES)
-
-target_include_directories(app SYSTEM PRIVATE
-    ${WEBVIEW_INCLUDE_DIRS}
-    ${JSON_INCLUDE_DIRS}
-)
-
-# Link das bibliotecas
-target_link_libraries(app PRIVATE
-    webview::core
-    nlohmann_json::nlohmann_json
-)
-
-# Aplicar flags de warning apenas ao código do projeto
+# Aplicar flags de warning ao executável também
 target_compile_options(app PRIVATE ${PROJECT_WARNING_FLAGS})
 
 # ==============================================================================
@@ -300,6 +356,10 @@ add_custom_target(run-dev
     COMMENT "Executando em modo desenvolvimento..."
     VERBATIM
 )
+
+if(ENABLE_TESTS)
+    add_subdirectory(tests)
+endif()
 
 # ==============================================================================
 # Informações de build
