@@ -35,11 +35,16 @@ namespace dev {
 enum class ServerState { Stopped, Starting, Running, Failed };
 
 struct ServerConfig {
-    std::string dev_url = "http://127.0.0.1:5173";
-    std::string host = "127.0.0.1";
-    int port = 5173;
-    std::string command = "npm run dev";
-    std::string working_dir = ""; // diretório do UI
+    constexpr static std::string_view default_dev_url = "http://127.0.0.1:5173";
+    constexpr static std::string_view default_host = "127.0.0.1";
+    constexpr static int default_port = 5173;
+    constexpr static std::string_view default_command = "npm run dev";
+
+    std::string dev_url{default_dev_url};
+    std::string host{default_host};
+    int port{default_port};
+    std::string command{default_command};
+    std::string working_dir{""}; // diretório do UI
     std::chrono::seconds timeout{30};
 };
 
@@ -109,7 +114,7 @@ inline bool is_server_responding(const std::string &host, int port) {
     setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
 
-    struct sockaddr_in serv_addr{};
+    struct sockaddr_in serv_addr {};
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(static_cast<uint16_t>(port));
 

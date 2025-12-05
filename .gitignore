@@ -1,6 +1,7 @@
 # Build
 build
 compile_commands.json
+cmake_profile.json
 .cache
 
 # Logs

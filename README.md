@@ -1,34 +1,34 @@
 # C++ WebView GUI with Vue 3
 
-Modern C++ desktop application using [webview/webview](https://github.com/webview/webview) for cross-platform GUI, [Vue 3](https://vuejs.org/) for the frontend, and [nlohmann/json](https://github.com/nlohmann/json) for JSON parsing.
+C++ desktop application using webview for cross-platform GUI, Vue 3 for the frontend, and nlohmann/json for JSON parsing.
 
-## ✨ Features
+## Features
 
-- 🖥️ **Cross-platform** - Windows, macOS, Linux
-- ⚡ **Hot Reload** - Vite dev server with instant updates during development
-- 🎯 **Modern C++20** - Uses `std::expected`, `std::span`, `std::format`
-- 🔧 **CLI Options** - Built-in argument parser with bash completion
-- 🛡️ **Sanitizers** - Address, undefined behavior, and leak sanitizers in debug
-- 📦 **Smart Dependencies** - Uses system libraries when available, downloads otherwise
+- Cross-platform (Windows, macOS, Linux)
+- Hot reload during development
+- C++20 with modern features
+- CLI options with bash completion
+- Sanitizers in debug builds
+- Automatic dependency detection
 
-## 📁 Project Structure
+## Project Structure
 
 ```
-├── CMakeLists.txt          # Build configuration with auto-detection
+├── CMakeLists.txt          # Build configuration
 ├── cmake/
-│   └── EmbedFile.cmake     # Embeds UI as C++ byte array (no Node.js needed)
+│   └── EmbedFile.cmake     # Embeds UI as C++ byte array
 ├── include/
-│   ├── option_parser.hpp   # CLI argument parser (combined header)
-│   ├── option_parser_decls.hpp  # Parser declarations
-│   ├── option_parser_impl.hpp   # Parser implementation
-│   ├── expected.hpp        # C++20/23 std::expected wrapper
-│   └── embedded_resources.h     # Interface for embedded UI data
+│   ├── option_parser.hpp   # CLI argument parser
+│   ├── option_parser_decls.hpp
+│   ├── option_parser_impl.hpp
+│   ├── expected.hpp        # C++20 std::expected wrapper
+│   └── embedded_resources.h # Embedded UI interface
 ├── src/
-│   ├── main.cpp            # Entry point with CLI handling
-│   ├── lib.cpp             # Library code (testable)
-│   ├── dev_server.h        # Vite dev server management
+│   ├── main.cpp            # Entry point
+│   ├── lib.cpp             # Library code
+│   ├── dev_server.h       # Vite dev server management
 │   └── app/
-│       ├── application.h   # Main Application class
+│       ├── application.h   # Main application class
 │       ├── bindings.h      # JS ↔ C++ bindings
 │       ├── cli_options.h   # CLI option definitions
 │       └── config.h        # App configuration
@@ -44,92 +44,78 @@ Modern C++ desktop application using [webview/webview](https://github.com/webvie
 │   ├── CMakeLists.txt
 │   └── test.cpp
 └── .vscode/
-    └── settings.json       # VS Code integration (ASAN env vars)
+    └── settings.json       # VS Code integration
 ```
 
-## 🔧 Dependencies
+## Dependencies
 
 ### Required
 
 | Tool | Version |
 |------|---------|
 | CMake | ≥ 3.16 |
-| C++ Compiler | C++20 support (GCC 11+, Clang 14+, MSVC 2022+) |
+| C++ Compiler | C++20 support |
 | Node.js | Latest LTS |
-| Ninja | Recommended (faster builds) |
+| Ninja | Recommended |
 
 ### Platform-specific
 
 | Platform | Requirements |
 |----------|-------------|
-| **Linux** | WebKitGTK 4.1+ (`sudo apt install libwebkit2gtk-4.1-dev`) |
-| **macOS** | WebKit (included in macOS) |
-| **Windows** | WebView2 Runtime (included in Windows 11) |
+| Linux | WebKitGTK 4.1+ |
+| macOS | WebKit (included) |
+| Windows | WebView2 Runtime |
 
 ### Auto-detected Libraries
 
-The build system automatically detects and uses system libraries when available:
+The build system detects and uses system libraries when available:
 
-- **nlohmann/json** - Falls back to FetchContent if not installed
-- **WebKitGTK** - Auto-detects version (6.0 → 4.1 → 4.0)
+- nlohmann/json - Falls back to FetchContent if not installed
+- WebKitGTK - Auto-detects version (6.0 → 4.1 → 4.0)
 
-## 🚀 Quick Start
+## Quick Start
 
-### Development Mode (with Hot Reload)
+### Development Mode
 
 ```bash
-# 1. Install UI dependencies (first time only)
+# Install UI dependencies (first time only)
 cd ui && npm install && cd ..
 
-# 2. Configure for development
+# Configure for development
 cmake -B build -G Ninja -DDEV_MODE=ON
 
-# 3. Build
+# Build
 cmake --build build
 
-# 4. Run the app
+# Run
 ./build/bin/app --dev
 ```
 
-> 💡 **Auto-start Vite**: The app automatically starts the Vite dev server if it's not already running! You don't need to run `npm run dev` manually. The app will:
-> 1. Check if Vite is running on port 5173
-> 2. Start it automatically if not
-> 3. Wait for the server to be ready
-> 4. Navigate to the dev server URL
->
-> If you prefer to run Vite manually (for seeing its logs), start it in a separate terminal with `cd ui && npm run dev`.
-
-Changes in `ui/src/` will instantly reflect in the running app! 🔥
+The app automatically starts the Vite dev server if not running. Changes in `ui/src/` are reflected immediately.
 
 ### Production Build
 
 ```bash
-# 1. Configure for production
+# Configure for production
 cmake -B build -G Ninja -DDEV_MODE=OFF
 
-# 2. Build (automatically installs npm deps and builds UI)
+# Build (automatically builds UI)
 cmake --build build
 
-# 3. Run
+# Run
 ./build/bin/app
 ```
 
-> 💡 **Auto-build UI**: In production mode, CMake automatically:
-> 1. Runs `npm install` to ensure dependencies are installed
-> 2. Runs `npm run build` when UI source files change
-> 3. Generates `build/generated/index_html_embedded.cpp` via `cmake/EmbedFile.cmake`
->
-> The embedded UI is exposed through `include/embedded_resources.h` as `embedded::index_html_str()`.
-> No extra Node.js postbuild scripts needed — pure CMake!
+CMake automatically builds the UI and embeds it into the executable.
 
-## 📖 CLI Options
+## CLI Options
 
 ```
 Usage: app [OPTIONS]
 
 Options:
-  -d, --dev                   Force development mode (Vite dev server)
-  -p, --prod                  Force production mode (embedded HTML)
+  -d, --dev                   Force development mode
+  -p, --prod                  Force production mode
   -v, --verbose               Enable verbose logging
   -V, --version               Show version information
   -W, --width <pixels>        Set window width
@@ -149,41 +135,41 @@ Examples:
 
 ### Bash Completion
 
-The app supports bash completion. When `COMP_LINE` is set, it outputs completions:
+The app supports bash completion:
 
 ```bash
 COMP_LINE="app --" COMP_POINT=7 ./build/bin/app
 # Output: --dev --prod --verbose --version --width --height --url
 ```
 
-## ⚙️ CMake Options
+## CMake Options
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `DEV_MODE` | `ON` (Debug) | Use Vite dev server instead of embedded HTML |
-| `ENABLE_TESTS` | `ON` | Enable unit tests with GoogleTest |
-| `FETCH_GTEST` | `ON` | Auto-download GoogleTest if not found on system |
-| `ENABLE_SANITIZERS` | `ON` (Debug) | Enable ASAN/UBSAN/LSAN |
-| `ENABLE_WARNINGS` | `ON` | Enable compiler warnings |
-| `FETCHCONTENT_QUIET` | `ON` | Set to `OFF` to see FetchContent download progress |
+| DEV_MODE | ON (Debug) | Use Vite dev server instead of embedded HTML |
+| ENABLE_TESTS | ON | Enable unit tests with GoogleTest |
+| FETCH_GTEST | ON | Download GoogleTest if not found |
+| ENABLE_SANITIZERS | ON (Debug) | Enable ASAN/UBSAN/LSAN |
+| ENABLE_WARNINGS | ON | Enable compiler warnings |
+| FETCHCONTENT_QUIET | ON | Show FetchContent download progress |
 
 ```bash
-# Example: Production build without sanitizers
+# Production build without sanitizers
 cmake -B build -DDEV_MODE=OFF -DENABLE_SANITIZERS=OFF -DCMAKE_BUILD_TYPE=Release
 
-# Example: Verbose dependency download
+# Verbose dependency download
 cmake -B build -DFETCHCONTENT_QUIET=OFF
 ```
 
 ### Dependency Caching
 
-FetchContent dependencies are cached in `.deps/` to speed up rebuilds:
+FetchContent dependencies are cached in `.deps/`:
 
-- **Persistent cache** - Survives `rm -rf build`
-- **Shallow clones** - Only downloads the specific tag, not full history
-- **System library detection** - Uses `nlohmann_json` from system if available
+- Persistent cache survives `rm -rf build`
+- Shallow clones for faster downloads
+- System library detection
 
-To force re-download of dependencies:
+To force re-download:
 ```bash
 rm -rf .deps
 cmake -B build
@@ -191,76 +177,125 @@ cmake -B build
 
 ### UI Embedding
 
-Production builds embed the Vite-generated `index.html` directly into a C++ source file via a tiny CMake script (`cmake/EmbedFile.cmake`). No extra Node.js postbuild step needed!
+Production builds embed the HTML directly into the executable using CMake.
 
-**How it works:**
-1. Vite builds and minifies the UI into a single `dist/index.html` (via `vite-plugin-singlefile`)
-2. CMake reads the HTML file and converts it to a C++ byte array with null terminator
-3. The generated `build/generated/index_html_embedded.cpp` is compiled into the executable
-4. Application code uses `embedded::index_html_str()` from `include/embedded_resources.h`
+How it works:
+1. Vite builds the UI into `dist/index.html`
+2. CMake converts the HTML to a C++ byte array
+3. Generated code is compiled into the executable
+4. Application uses `embedded::index_html_str()`
 
-**Benefits:**
-- ✅ 100% portable (works with any compiler/platform CMake supports)
-- ✅ No MSVC string literal limits (uses byte array, not string literal)
-- ✅ Automatic rebuild when UI sources change
-- ✅ No runtime dependencies on external files
+Benefits:
+- Portable across compilers/platforms
+- No MSVC string literal limits
+- Automatic rebuild on UI changes
+- No runtime dependencies
 
-## 🏗️ Architecture
+## Customization
+
+### Adding JS ↔ C++ Bindings
+
+Bindings are defined in `src/app/bindings.h`:
+
+```cpp
+// Add binding
+webview.bind("my_function", [](const std::string& request) -> std::string {
+    auto json = nlohmann::json::parse(request);
+    // Process request
+    return nlohmann::json{{"result", "ok"}}.dump();
+});
+```
+
+```javascript
+// Call from Vue
+const response = await window.my_function({data: "hello"});
+```
+
+### Modifying the Vue UI
+
+The frontend uses Vue 3 + Vite. The app manages the dev server automatically:
+
+```bash
+./build/bin/app --dev
+```
+
+File structure:
+```
+ui/src/
+├── App.vue          # Main component
+├── main.js          # Vue setup
+└── style.css        # Global styles
+```
+
+Changes in `ui/src/` are reflected immediately without rebuilding.
+
+### Integrating C++ Libraries
+
+Add dependencies using FetchContent:
+
+```cmake
+# In CMakeLists.txt
+include(FetchContent)
+
+FetchContent_Declare(
+    my_library
+    GIT_REPOSITORY https://github.com/user/my_library.git
+    GIT_TAG v1.0.0
+)
+
+FetchContent_MakeAvailable(my_library)
+
+target_link_libraries(${PROJECT_NAME}_lib PRIVATE my_library)
+```
+
+For system libraries:
+```cmake
+find_package(SomeLib QUIET)
+if(SomeLib_FOUND)
+    target_link_libraries(${PROJECT_NAME}_lib PRIVATE SomeLib::SomeLib)
+else()
+    # Fallback to FetchContent
+endif()
+```
+
+## Architecture
 
 ### JS ↔ C++ Communication
 
-The frontend communicates with C++ via `window.ping()`:
+Frontend calls C++ via `window.ping()`:
 
 ```javascript
-// Vue component
-window.ping(message)  // Calls C++ binding
+window.ping(message)
 ```
 
 ```cpp
-// C++ binding (bindings.h)
+// In bindings.h
 webview.bind("ping", [](const std::string& req) {
-    // Handle request from JS
     return response;
 });
 ```
 
 ### Dev Server Management
 
-In development mode, `dev_server.h` provides automatic Vite server management:
+In development mode, the app automatically manages the Vite server:
 
-```cpp
-// The app automatically handles the dev server
-DevServer server(ui_directory);
-server.ensure_running();  // Starts Vite if not running
-std::string url = server.get_url();  // http://127.0.0.1:5173
-```
-
-**Features:**
-- 🔍 **Auto-detection** - Checks if Vite is already running on port 5173
-- 🚀 **Auto-start** - Spawns `npm run dev` if server is not running
-- ⏳ **Wait for ready** - Polls until the server responds
-- 🧹 **Auto-cleanup** - Terminates the server when the app exits (if it started it)
-
-This means you can just run the app and it handles everything!
+- Checks if server is running on port 5173
+- Starts `npm run dev` if not running
+- Waits for server to be ready
+- Terminates server on exit if it started it
 
 ### Option Parser
 
-Custom CLI parser (`option_parser.hpp`) with:
+Custom CLI parser with type-safe option definitions and bash completion.
 
-- Type-safe option definitions
-- Short and long options
-- Value validation
-- Auto-generated help text
-- Bash completion support
+## Debugging
 
-## 🔍 Debugging
-
-### Running with Sanitizers
+### Sanitizers
 
 Debug builds include Address Sanitizer. To suppress known leaks:
 
 ```bash
-# Using the wrapper script
+# Using wrapper script
 ./build/bin/run.sh
 
 # Or manually
@@ -269,18 +304,18 @@ LSAN_OPTIONS="suppressions=.asan_suppressions" ./build/bin/app
 
 ### VS Code Integration
 
-The `.vscode/settings.json` configures the environment for debugging with ASAN.
+`.vscode/settings.json` configures debugging with ASAN.
 
-## � Troubleshooting
+## Troubleshooting
 
-### CMake generator mismatch error
+### CMake generator mismatch
 
 ```
 CMake Error: generator : Ninja
 Does not match the generator used previously: Unix Makefiles
 ```
 
-**Solution:** Clear the FetchContent build cache:
+Solution:
 ```bash
 rm -rf .deps/*-build .deps/*-subbuild
 cmake -B build -G Ninja
@@ -288,11 +323,7 @@ cmake -B build -G Ninja
 
 ### WebKitGTK not found (Linux)
 
-```
-WebKitGTK não encontrado!
-```
-
-**Solution:** Install WebKitGTK development package:
+Install WebKitGTK:
 ```bash
 # Ubuntu/Debian
 sudo apt install libwebkit2gtk-4.1-dev
@@ -306,26 +337,26 @@ sudo pacman -S webkit2gtk-4.1
 
 ### Vite dev server not starting
 
-If the app hangs waiting for Vite:
-1. Check if port 5173 is in use: `lsof -i :5173`
+If the app hangs:
+1. Check if port 5173 is in use
 2. Try starting Vite manually: `cd ui && npm run dev`
-3. Check for npm errors in the UI directory
+3. Check npm errors
 
 ### ASAN leak reports
 
-WebKitGTK has known memory leaks. Use the wrapper script to suppress them:
+WebKitGTK has known leaks. Use the wrapper script:
 ```bash
 ./build/bin/run.sh
 ```
 
-## �📄 License
+## License
 
 MIT License - See [LICENSE](LICENSE) for details.
 
-## 🙏 Credits
+## Credits
 
-- [nikelaz/cpp-webview-gui](https://github.com/nikelaz/cpp-webview-gui) - Original project this was forked from
-- [webview/webview](https://github.com/webview/webview) - Cross-platform webview library
-- [nlohmann/json](https://github.com/nlohmann/json) - JSON for Modern C++
-- [Vue.js](https://vuejs.org/) - Progressive JavaScript Framework
-- [Vite](https://vitejs.dev/) - Next Generation Frontend Tooling
+- [nikelaz/cpp-webview-gui](https://github.com/nikelaz/cpp-webview-gui) - Original project
+- [webview/webview](https://github.com/webview/webview) - Webview library
+- [nlohmann/json](https://github.com/nlohmann/json) - JSON library
+- [Vue.js](https://vuejs.org/) - Frontend framework
+- [Vite](https://vitejs.dev/) - Build tool

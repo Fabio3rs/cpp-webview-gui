@@ -4,6 +4,8 @@ project(app LANGUAGES CXX C)
 # ==============================================================================
 # Configurações de padrão C++
 # ==============================================================================
+# Nota: C++20 é usado porque webview 0.12.0 tem bugs com Clang + C++23
+# (incomplete type 'user_script::impl' com std::unique_ptr)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
