@@ -123,6 +123,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install Ninja
+        run: choco install ninja -y
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -134,17 +137,36 @@ jobs:
         run: npm install
         working-directory: ui
 
+      - name: Build UI (generate embedded header)
+        run: |
+          npm run build
+          node ./postbuild.js ./dist/index.html ./dist/index_html.h
+        working-directory: ui
+
+      - name: Verify UI header was generated
+        run: |
+          if (Test-Path ui/dist/index_html.h) {
+            Write-Host "index_html.h generated successfully"
+            Get-Content ui/dist/index_html.h -Head 5
+          } else {
+            Write-Error "index_html.h was not generated!"
+            exit 1
+          }
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Configure CMake
         run: |
-          cmake -B build `
+          cmake -B build -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
             -DDEV_MODE=OFF `
             -DENABLE_SANITIZERS=OFF
 
       - name: Build
-        run: cmake --build build --config Release --parallel
+        run: cmake --build build --parallel
 
       - name: Verify executable exists
         run: |
-          Test-Path build/bin/Release/app.exe
-          ./build/bin/Release/app.exe --version
+          Test-Path build/bin/app.exe
+          ./build/bin/app.exe --version

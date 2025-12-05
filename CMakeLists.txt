@@ -99,6 +99,8 @@ if(ENABLE_WARNINGS)
     elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
         message(STATUS "Configurando flags do MSVC")
         set(PROJECT_WARNING_FLAGS /W4)
+        # Desabilita warnings de funções "inseguras" do CRT (getenv, etc.)
+        add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
     elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         message(STATUS "Configurando flags do Clang")
         set(PROJECT_WARNING_FLAGS
@@ -214,10 +216,14 @@ if(NOT DEV_MODE)
         "${UI_DIR}/postbuild.js"
     )
 
-    # Detectar npm
+    # Detectar npm e node
     find_program(NPM_EXECUTABLE npm)
+    find_program(NODE_EXECUTABLE node)
     if(NOT NPM_EXECUTABLE)
         message(FATAL_ERROR "npm não encontrado! Necessário para build de produção.")
+    endif()
+    if(NOT NODE_EXECUTABLE)
+        message(FATAL_ERROR "node não encontrado! Necessário para build de produção.")
     endif()
 
     # Custom command para gerar o header do UI
@@ -225,6 +231,7 @@ if(NOT DEV_MODE)
         OUTPUT "${UI_OUTPUT_HEADER}"
         COMMAND ${NPM_EXECUTABLE} install --silent
         COMMAND ${NPM_EXECUTABLE} run build
+        COMMAND ${NODE_EXECUTABLE} postbuild.js dist/index.html dist/index_html.h
         WORKING_DIRECTORY "${UI_DIR}"
         DEPENDS ${UI_SOURCES}
         COMMENT "Building UI para produção..."

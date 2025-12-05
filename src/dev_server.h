@@ -68,7 +68,8 @@ inline bool is_server_responding(const std::string &host, int port) {
         return false;
 
     std::wstring whost(host.begin(), host.end());
-    HINTERNET connect = WinHttpConnect(session, whost.c_str(), port, 0);
+    HINTERNET connect = WinHttpConnect(session, whost.c_str(),
+                                       static_cast<INTERNET_PORT>(port), 0);
 
     if (!connect) {
         WinHttpCloseHandle(session);
