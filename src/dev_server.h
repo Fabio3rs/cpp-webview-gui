@@ -9,6 +9,7 @@
 #include <cstring>
 #include <iostream>
 #include <string>
+#include <string_view>
 #include <thread>
 
 #ifdef _WIN32
@@ -108,7 +109,7 @@ inline bool is_server_responding(const std::string &host, int port) {
     setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
 
-    struct sockaddr_in serv_addr {};
+    struct sockaddr_in serv_addr{};
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(static_cast<uint16_t>(port));
 
@@ -331,7 +332,7 @@ inline bool is_dev_mode() {
     // Primeiro, checa a env var (permite override em runtime)
     const char *env = std::getenv("APP_DEV");
     if (env) {
-        std::string val(env);
+        std::string_view val(env);
         return val == "1" || val == "true" || val == "yes";
     }
 
