@@ -239,7 +239,10 @@ else()
 endif()
 
 # Includes do projeto
-target_include_directories(app PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_include_directories(app PRIVATE
+    "${CMAKE_SOURCE_DIR}/src"
+    "${CMAKE_SOURCE_DIR}/include"
+)
 
 # Includes das dependências como SYSTEM (suprime warnings)
 get_target_property(WEBVIEW_INCLUDE_DIRS webview::core INTERFACE_INCLUDE_DIRECTORIES)

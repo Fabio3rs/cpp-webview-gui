@@ -1,114 +1,61 @@
-#include "dev_server.h"
-#include "webview/webview.h"
+// =============================================================================
+// Entry Point - Ponto de entrada com parsing de argumentos CLI
+// =============================================================================
+
+#include "app/application.h"
+#include "app/cli_options.h"
+#include "app/config.h"
 #include <iostream>
-#include <nlohmann/json.hpp>
 
-// Em produção, inclui o HTML embutido
-#ifndef APP_DEV_MODE
-#include "index_html.h"
-#endif
-
-using json = nlohmann::json;
-
-// Configuração do app
-namespace config {
-constexpr const char *APP_TITLE = "Prompt Workbench";
-constexpr int WINDOW_WIDTH = 1280;
-constexpr int WINDOW_HEIGHT = 720;
-} // namespace config
-
-// =============================================================================
-// Setup de bindings JS <-> C++
-// =============================================================================
-void setup_bindings(webview::webview &w) {
-    // Exemplo: ping/pong
-    w.bind("ping", [&](const std::string &args_str) -> std::string {
-        json args = json::parse(args_str);
-
-        std::cout << "[APP] Ping from UI: " << args[0] << std::endl;
-
-        json result = {{"code", 200}, {"message", "pong"}};
-        return result.dump();
-    });
-
-    // Adicione mais bindings aqui...
-}
-
-// =============================================================================
-// Main
-// =============================================================================
 #ifdef _WIN32
 int WINAPI WinMain(HINSTANCE /*hInst*/, HINSTANCE /*hPrevInst*/,
                    LPSTR /*lpCmdLine*/, int /*nCmdShow*/) {
+    // No Windows GUI, não temos argc/argv facilmente
+    // Usa valores padrão
+    app::Application application;
+    if (!application.initialize()) {
+        return 1;
+    }
+    return application.run();
+}
 #else
-int main() {
-#endif
-    // Detecta modo dev
-    bool dev_mode = dev::is_dev_mode();
-    dev::ServerProcess dev_server_proc;
-    std::string dev_url;
+int main(int argc, char *argv[]) {
+    auto parser = app::create_parser();
+    auto result = parser.parse(argc, argv);
 
-    std::cout << "[APP] Modo: " << (dev_mode ? "DEVELOPMENT" : "PRODUCTION")
-              << std::endl;
+    switch (result.status) {
+    case cli::ParseStatus::ShowHelp:
+        std::cout << parser.generate_help(argv[0]);
+        return 0;
 
-    // Em dev, inicia o Vite dev server
-    if (dev_mode) {
-        dev::ServerConfig cfg = dev::get_default_config();
-        dev_url = cfg.dev_url;
+    case cli::ParseStatus::ShowHelpVerbose:
+        std::cout << parser.generate_help_verbose(argv[0]);
+        return 0;
 
-        if (!dev::ensure_server_running(cfg, dev_server_proc)) {
-            std::cerr << "[APP] Falha ao iniciar dev server. Abortando."
-                      << std::endl;
-            return 1;
-        }
+    case cli::ParseStatus::ShowVersion:
+        std::cout << app::config::WINDOW_TITLE << " v" << app::config::VERSION
+                  << "\n";
+        return 0;
+
+    case cli::ParseStatus::ShowCompletion:
+        // Completion já foi tratada internamente, apenas sai
+        return 0;
+
+    case cli::ParseStatus::Error:
+        std::cerr << "Erro: " << result.error_message << "\n";
+        std::cerr << "Use --help para ver as opções disponíveis.\n";
+        return 1;
+
+    case cli::ParseStatus::Ok:
+        break;
     }
 
-    try {
-        // DevTools: habilitado em dev, desabilitado em prod
-        webview::webview main_window(dev_mode, nullptr);
-        main_window.set_title(config::APP_TITLE);
-        main_window.set_size(config::WINDOW_WIDTH, config::WINDOW_HEIGHT,
-                             WEBVIEW_HINT_NONE);
+    app::Application application(*result.config);
 
-        // Setup bindings
-        setup_bindings(main_window);
-
-        // Carrega conteúdo
-        if (dev_mode) {
-            std::cout << "[APP] Navegando para " << dev_url << std::endl;
-            main_window.navigate(dev_url);
-        } else {
-#ifdef APP_DEV_MODE
-            // Fallback se compilado sem o header
-            std::cerr << "[APP] ERRO: Build de dev sem Vite server!"
-                      << std::endl;
-            return 1;
-#else
-            std::cout << "[APP] Carregando HTML embutido..." << std::endl;
-            main_window.set_html(INDEX_HTML);
-#endif
-        }
-
-        std::cout << "[APP] Iniciando event loop..." << std::endl;
-
-        // Run event loop
-        main_window.run();
-
-    } catch (const webview::exception &e) {
-        std::cerr << "[APP] Erro WebView: " << e.what() << std::endl;
-
-        // Cleanup em caso de erro
-        if (dev_mode) {
-            dev::stop_server(dev_server_proc);
-        }
+    if (!application.initialize()) {
         return 1;
     }
 
-    // Cleanup: encerra dev server se fomos nós que iniciamos
-    if (dev_mode) {
-        dev::stop_server(dev_server_proc);
-    }
-
-    std::cout << "[APP] Encerrado." << std::endl;
-    return 0;
+    return application.run();
 }
+#endif
