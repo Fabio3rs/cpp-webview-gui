@@ -137,22 +137,6 @@ jobs:
         run: npm install
         working-directory: ui
 
-      - name: Build UI (generate embedded header)
-        run: |
-          npm run build
-          node ./postbuild.js ./dist/index.html ./dist/index_html.h
-        working-directory: ui
-
-      - name: Verify UI header was generated
-        run: |
-          if (Test-Path ui/dist/index_html.h) {
-            Write-Host "index_html.h generated successfully"
-            Get-Content ui/dist/index_html.h -Head 5
-          } else {
-            Write-Error "index_html.h was not generated!"
-            exit 1
-          }
-
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
 
