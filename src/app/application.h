@@ -13,9 +13,9 @@
 #include <stdexcept>
 #include <string>
 
-// Em produção, inclui o HTML embutido
+// Em produção, inclui o header com o HTML embutido
 #ifndef APP_DEV_MODE
-#include "index_html.h"
+#include "embedded_resources.h"
 #endif
 
 namespace app {

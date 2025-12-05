@@ -247,45 +247,56 @@ FetchContent_MakeAvailable(webview)
 # ==============================================================================
 set(UI_DIR "${CMAKE_SOURCE_DIR}/ui")
 set(UI_DIST_DIR "${UI_DIR}/dist")
-set(UI_OUTPUT_HEADER "${UI_DIST_DIR}/index_html.h")
+set(UI_DIST_HTML "${UI_DIST_DIR}/index.html")
+set(UI_EMBEDDED_CPP "${CMAKE_BINARY_DIR}/generated/index_html_embedded.cpp")
 
 # ==============================================================================
 # Build do UI (apenas em modo produção)
 # ==============================================================================
 if(NOT DEV_MODE)
-    # Arquivos fonte do UI para detectar alterações
-    file(GLOB_RECURSE UI_SOURCES
-        "${UI_DIR}/src/*"
+    # Arquivos fonte do UI para detectar alterações (exclui dist/)
+    file(GLOB UI_SRC_FILES "${UI_DIR}/src/*")
+    set(UI_SOURCES
         "${UI_DIR}/index.html"
         "${UI_DIR}/vite.config.js"
         "${UI_DIR}/package.json"
-        "${UI_DIR}/postbuild.js"
+        ${UI_SRC_FILES}
     )
 
-    # Detectar npm e node
+    # Detectar npm
     find_program(NPM_EXECUTABLE npm)
-    find_program(NODE_EXECUTABLE node)
     if(NOT NPM_EXECUTABLE)
         message(FATAL_ERROR "npm não encontrado! Necessário para build de produção.")
     endif()
-    if(NOT NODE_EXECUTABLE)
-        message(FATAL_ERROR "node não encontrado! Necessário para build de produção.")
-    endif()
 
-    # Custom command para gerar o header do UI
+    # Step 1: Build do UI com Vite (gera dist/index.html)
     add_custom_command(
-        OUTPUT "${UI_OUTPUT_HEADER}"
+        OUTPUT "${UI_DIST_HTML}"
         COMMAND ${NPM_EXECUTABLE} install --silent
         COMMAND ${NPM_EXECUTABLE} run build
-        COMMAND ${NODE_EXECUTABLE} postbuild.js dist/index.html dist/index_html.h
         WORKING_DIRECTORY "${UI_DIR}"
         DEPENDS ${UI_SOURCES}
-        COMMENT "Building UI para produção..."
+        COMMENT "Building UI com Vite..."
         VERBATIM
     )
 
-    # Custom target para o UI
-    add_custom_target(ui DEPENDS "${UI_OUTPUT_HEADER}")
+    # Step 2: Embed do HTML como array C++ (100% CMake, sem Node.js)
+    # Usa o script de embedding do diretório cmake/
+    set(EMBED_SCRIPT "${CMAKE_SOURCE_DIR}/cmake/EmbedFile.cmake")
+
+    add_custom_command(
+        OUTPUT "${UI_EMBEDDED_CPP}"
+        COMMAND ${CMAKE_COMMAND}
+            -DINPUT_FILE=${UI_DIST_HTML}
+            -DOUTPUT_FILE=${UI_EMBEDDED_CPP}
+            -DSYMBOL=index_html
+            -P ${EMBED_SCRIPT}
+        DEPENDS "${UI_DIST_HTML}" "${EMBED_SCRIPT}"
+        COMMENT "Embedding UI como array C++..."
+    )
+
+    # Target que agrupa todo o build do UI
+    add_custom_target(ui_build DEPENDS "${UI_EMBEDDED_CPP}")
 endif()
 
 # ==============================================================================
@@ -337,9 +348,9 @@ if(DEV_MODE)
     )
     message(STATUS "Modo DEV: usando Vite dev server (hot reload)")
 else()
-    # Em produção, depende do build do UI
-    add_dependencies(app ui)
-    target_include_directories(app PRIVATE "${UI_DIST_DIR}")
+    # Em produção, adiciona o .cpp gerado com o HTML embarcado
+    target_sources(app PRIVATE "${UI_EMBEDDED_CPP}")
+    add_dependencies(app ui_build)
     message(STATUS "Modo PROD: UI será embutido no executável")
 endif()
 
