@@ -3,9 +3,9 @@
 // Application - Classe principal que encapsula a lógica do app
 // =============================================================================
 
-#include "app/bindings.h"
 #include "app/cli_options.h"
 #include "app/config.h"
+#include "app/handlers.h"
 #include "dev_server.h"
 #include "webview/webview.h"
 #include <iostream>
@@ -109,7 +109,7 @@ class Application {
             window_->set_size(width, height, WEBVIEW_HINT_NONE);
 
             // Setup bindings
-            bindings::setup(*window_);
+            app::setup(*window_, handlers_);
 
             return true;
         } catch (const webview::exception &e) {
@@ -175,6 +175,7 @@ class Application {
     bool verbose_ = false;
     std::string dev_url_;
     dev::ServerProcess dev_server_;
+    app::HandlerRegistry handlers_;
     std::unique_ptr<webview::webview> window_;
 };
 
