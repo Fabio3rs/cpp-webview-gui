@@ -90,6 +90,12 @@ jobs:
       - name: Install dependencies
         run: brew install ninja
 
+      - name: Install LLVM (Homebrew)
+        run: |
+          brew update
+          brew install llvm
+          echo "CLANG_BIN_DIR=$(brew --prefix llvm)/bin" >> "$GITHUB_ENV"
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -101,12 +107,15 @@ jobs:
         run: npm install
         working-directory: ui
 
-      - name: Configure CMake
+      - name: Configure CMake (LLVM Homebrew)
         run: |
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DDEV_MODE=OFF \
-            -DENABLE_SANITIZERS=ON -DCMAKE_CXX_FLAGS="-std=c++20 -fexperimental-library"
+            -DENABLE_SANITIZERS=ON \
+            -DCMAKE_TOOLCHAIN_FILE=cmake/clang_toolchain.cmake \
+            -DCLANG_BIN_DIR="$CLANG_BIN_DIR" \
+            -DCMAKE_CXX_FLAGS="-std=c++20 -fexperimental-library"
 
       - name: Build
         run: cmake --build build --parallel
