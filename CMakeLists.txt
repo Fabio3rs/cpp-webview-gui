@@ -183,16 +183,29 @@ endif()
 # Sanitizers (opcional, para debugging)
 # ==============================================================================
 if(ENABLE_SANITIZERS)
-    set(SANITIZER_FLAGS
-        -fno-omit-frame-pointer
-        -fsanitize=address
-        -fsanitize=undefined
-        -fsanitize=leak
-        -g
-    )
+    # MSVC has different flag syntax and limited sanitizer support. Use MSVC flags
+    # when building with Visual Studio / MSVC toolchain.
+    if(MSVC)
+        message(STATUS "Habilitando sanitizers (MSVC)")
+        # Address sanitizer on MSVC is enabled with /fsanitize=address (VS 2019+)
+        # Enable debug information with /Zi so sanitizer reports include symbols.
+        add_compile_options(/fsanitize=address /Zi)
+        # Linker option is not required explicitly for MSVC address sanitizer,
+        # but propagate the same flags to link step just in case.
+        add_link_options(/fsanitize=address)
+    else()
+        # GCC/Clang flags
+        set(SANITIZER_FLAGS
+            -fno-omit-frame-pointer
+            -fsanitize=address
+            -fsanitize=undefined
+            -fsanitize=leak
+            -g
+        )
 
-    add_compile_options(${SANITIZER_FLAGS})
-    add_link_options(${SANITIZER_FLAGS})
+        add_compile_options(${SANITIZER_FLAGS})
+        add_link_options(${SANITIZER_FLAGS})
+    endif()
 
     # Copia arquivo de supressões LSAN para o diretório de build
     set(LSAN_SUPPRESSIONS_SRC "${CMAKE_SOURCE_DIR}/.asan_suppressions")
