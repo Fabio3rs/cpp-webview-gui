@@ -33,6 +33,76 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # ==============================================================================
+# Opções do projeto (defaults condicionais baseados no build type)
+# ==============================================================================
+# Detecta se está em modo Debug
+if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR NOT CMAKE_BUILD_TYPE)
+    set(DEFAULT_SANITIZERS ON)
+    set(DEFAULT_DEV_MODE ON)
+else()
+    set(DEFAULT_SANITIZERS OFF)
+    set(DEFAULT_DEV_MODE OFF)
+endif()
+
+option(ENABLE_SANITIZERS "Enable sanitizers for debugging" ${DEFAULT_SANITIZERS})
+option(ENABLE_WARNINGS "Enable compiler warnings" ON)
+option(DEV_MODE "Build for development (uses Vite dev server)" ${DEFAULT_DEV_MODE})
+
+# ==============================================================================
+# Sanitizers (opcional, para debugging)
+# ==============================================================================
+if(ENABLE_SANITIZERS)
+    # MSVC has different flag syntax and limited sanitizer support. Use MSVC flags
+    # when building with Visual Studio / MSVC toolchain.
+    if(MSVC)
+        message(STATUS "Habilitando sanitizers (MSVC)")
+        # Address sanitizer on MSVC is enabled with /fsanitize=address (VS 2019+)
+        # Enable debug information with /Zi so sanitizer reports include symbols.
+        add_compile_options(/fsanitize=address /Zi)
+        # Linker option is not required explicitly for MSVC address sanitizer,
+        # but propagate the same flags to link step just in case.
+        add_link_options(/fsanitize=address)
+    else()
+        # GCC/Clang flags
+        set(SANITIZER_FLAGS
+            -fno-omit-frame-pointer
+            -fsanitize=address
+            -fsanitize=undefined
+            -fsanitize=leak
+            -g
+        )
+
+        add_compile_options(${SANITIZER_FLAGS})
+        add_link_options(${SANITIZER_FLAGS})
+    endif()
+
+    # Copia arquivo de supressões LSAN para o diretório de build
+    set(LSAN_SUPPRESSIONS_SRC "${CMAKE_SOURCE_DIR}/.asan_suppressions")
+    set(LSAN_SUPPRESSIONS_DST "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/.asan_suppressions")
+
+    if(EXISTS "${LSAN_SUPPRESSIONS_SRC}")
+        # Copia o arquivo para o diretório do executável
+        configure_file("${LSAN_SUPPRESSIONS_SRC}" "${LSAN_SUPPRESSIONS_DST}" COPYONLY)
+
+        # Cria script wrapper para executar com supressões
+        file(WRITE "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/run.sh"
+"#!/bin/bash
+SCRIPT_DIR=\"$(cd \"$(dirname \"\${BASH_SOURCE[0]}\")\" && pwd)\"
+export LSAN_OPTIONS=\"suppressions=\${SCRIPT_DIR}/.asan_suppressions\"
+exec \"\${SCRIPT_DIR}/app\" \"\$@\"
+")
+        # Torna o script executável
+        file(CHMOD "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/run.sh"
+            PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
+                        GROUP_READ GROUP_EXECUTE
+                        WORLD_READ WORLD_EXECUTE
+        )
+        message(STATUS "Supressões LSAN: ${LSAN_SUPPRESSIONS_DST}")
+        message(STATUS "Use ./build/bin/run.sh para executar sem spam de leaks")
+    endif()
+endif()
+
+# ==============================================================================
 # Configurações do FetchContent (deve vir antes de qualquer FetchContent_Declare)
 # ==============================================================================
 # Otimização: evita re-verificar repos se já foram baixados
@@ -81,22 +151,6 @@ if(ENABLE_TESTS)
         endif()
     endif()
 endif()
-
-# ==============================================================================
-# Opções do projeto (defaults condicionais baseados no build type)
-# ==============================================================================
-# Detecta se está em modo Debug
-if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR NOT CMAKE_BUILD_TYPE)
-    set(DEFAULT_SANITIZERS ON)
-    set(DEFAULT_DEV_MODE ON)
-else()
-    set(DEFAULT_SANITIZERS OFF)
-    set(DEFAULT_DEV_MODE OFF)
-endif()
-
-option(ENABLE_SANITIZERS "Enable sanitizers for debugging" ${DEFAULT_SANITIZERS})
-option(ENABLE_WARNINGS "Enable compiler warnings" ON)
-option(DEV_MODE "Build for development (uses Vite dev server)" ${DEFAULT_DEV_MODE})
 
 # ==============================================================================
 # Auto-detecção do WebKitGTK (Linux)
@@ -176,60 +230,6 @@ if(ENABLE_WARNINGS)
             -Wsign-conversion
             -Wno-padded
         )
-    endif()
-endif()
-
-# ==============================================================================
-# Sanitizers (opcional, para debugging)
-# ==============================================================================
-if(ENABLE_SANITIZERS)
-    # MSVC has different flag syntax and limited sanitizer support. Use MSVC flags
-    # when building with Visual Studio / MSVC toolchain.
-    if(MSVC)
-        message(STATUS "Habilitando sanitizers (MSVC)")
-        # Address sanitizer on MSVC is enabled with /fsanitize=address (VS 2019+)
-        # Enable debug information with /Zi so sanitizer reports include symbols.
-        add_compile_options(/fsanitize=address /Zi)
-        # Linker option is not required explicitly for MSVC address sanitizer,
-        # but propagate the same flags to link step just in case.
-        add_link_options(/fsanitize=address)
-    else()
-        # GCC/Clang flags
-        set(SANITIZER_FLAGS
-            -fno-omit-frame-pointer
-            -fsanitize=address
-            -fsanitize=undefined
-            -fsanitize=leak
-            -g
-        )
-
-        add_compile_options(${SANITIZER_FLAGS})
-        add_link_options(${SANITIZER_FLAGS})
-    endif()
-
-    # Copia arquivo de supressões LSAN para o diretório de build
-    set(LSAN_SUPPRESSIONS_SRC "${CMAKE_SOURCE_DIR}/.asan_suppressions")
-    set(LSAN_SUPPRESSIONS_DST "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/.asan_suppressions")
-
-    if(EXISTS "${LSAN_SUPPRESSIONS_SRC}")
-        # Copia o arquivo para o diretório do executável
-        configure_file("${LSAN_SUPPRESSIONS_SRC}" "${LSAN_SUPPRESSIONS_DST}" COPYONLY)
-
-        # Cria script wrapper para executar com supressões
-        file(WRITE "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/run.sh"
-"#!/bin/bash
-SCRIPT_DIR=\"$(cd \"$(dirname \"\${BASH_SOURCE[0]}\")\" && pwd)\"
-export LSAN_OPTIONS=\"suppressions=\${SCRIPT_DIR}/.asan_suppressions\"
-exec \"\${SCRIPT_DIR}/app\" \"\$@\"
-")
-        # Torna o script executável
-        file(CHMOD "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/run.sh"
-            PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
-                        GROUP_READ GROUP_EXECUTE
-                        WORLD_READ WORLD_EXECUTE
-        )
-        message(STATUS "Supressões LSAN: ${LSAN_SUPPRESSIONS_DST}")
-        message(STATUS "Use ./build/bin/run.sh para executar sem spam de leaks")
     endif()
 endif()
 
