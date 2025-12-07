@@ -8,10 +8,17 @@
 #include "app/handlers.h"
 #include "dev_server.h"
 #include "webview/webview.h"
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <csignal>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
+#include <stop_token>
 #include <string>
+#include <thread>
 
 // Em produção, inclui o header com o HTML embutido
 #ifndef APP_DEV_MODE
@@ -44,6 +51,9 @@ class Application {
     bool initialize() {
         log_mode();
 
+        // Configura signal handlers para graceful shutdown
+        setup_signal_handlers();
+
         if (dev_mode_ && !start_dev_server()) {
             return false;
         }
@@ -63,10 +73,61 @@ class Application {
         try {
             load_content();
             std::cout << "[APP] Iniciando event loop..." << std::endl;
+
+            // Inicia thread de monitoramento para shutdown graceful
+            auto shutdownMonitor = [this](std::stop_token stoken) {
+                try {
+                    std::unique_lock<std::mutex> lock(shutdown_mutex_);
+                    // Espera até que shutdown seja solicitado ou thread seja
+                    // parada
+                    auto shutdownCondition = [this, stoken]() {
+                        return should_shutdown() || stoken.stop_requested();
+                    };
+                    while (!shutdownCondition()) {
+                        // O timeout garante que não fique bloqueado para sempre
+                        // caso algo imprevisto aconteça
+                        shutdown_cv_.wait_for(lock, std::chrono::seconds(5),
+                                              shutdownCondition);
+                        std::this_thread::yield();
+                    }
+
+                    // Só termina a janela se foi um shutdown solicitado (sinal)
+                    if (should_shutdown()) {
+                        std::cout << "[APP] Shutdown solicitado, terminando..."
+                                  << std::endl;
+                        window_->terminate();
+                    }
+                    // Se foi stop_token, é saída normal, apenas sai
+                } catch (const std::exception &e) {
+                    std::cerr << "[APP] Erro no shutdown monitor: " << e.what()
+                              << std::endl;
+                }
+            };
+
+            std::jthread shutdown_monitor(shutdownMonitor);
+
+            // Executa o loop principal da webview
             window_->run();
+
+            // Notifica a condition variable para liberar a thread na saída
+            // normal
+            shutdown_monitor.request_stop();
+            shutdown_cv_.notify_all();
+
+            // jthread junta automaticamente no destrutor
+
+            // Verifica se terminou por shutdown graceful
+            if (should_shutdown()) {
+                std::cout << "[APP] Shutdown graceful concluído" << std::endl;
+                return 0;
+            }
         } catch (const webview::exception &e) {
             std::cerr << "[APP] Erro WebView: " << e.what() << std::endl;
+            shutdown_cv_.notify_all();
             return 1;
+        } catch (const std::exception &e) {
+            std::cerr << "[APP] Erro inesperado: " << e.what() << std::endl;
+            shutdown_cv_.notify_all();
         }
 
         return 0;
@@ -166,6 +227,42 @@ class Application {
         // Fallback para detecção automática
         return dev::is_dev_mode();
     }
+
+    // =========================================================================
+    // Signal handling para graceful shutdown
+    // =========================================================================
+    static std::atomic<bool> shutdown_requested_;
+    static std::mutex shutdown_mutex_;
+    static std::condition_variable shutdown_cv_;
+
+    static void signal_handler(int signal) {
+        // Evita múltiplas impressões do mesmo sinal
+        static std::atomic<bool> signal_printed{false};
+        if (!signal_printed.exchange(true)) {
+            std::cout << "\n[APP] Sinal " << signal
+                      << " recebido, iniciando shutdown graceful..."
+                      << std::endl;
+        }
+        shutdown_requested_.store(true);
+        shutdown_cv_.notify_all(); // Notifica todas as threads esperando
+    }
+
+    void setup_signal_handlers() {
+        // Configura handlers para sinais comuns
+        std::signal(SIGINT, signal_handler);  // Ctrl+C
+        std::signal(SIGTERM, signal_handler); // kill ou systemd
+
+        // No Windows, SIGBREAK também pode ser útil
+#ifdef _WIN32
+        std::signal(SIGBREAK, signal_handler);
+#endif
+
+        shutdown_requested_.store(false);
+        std::cout << "[APP] Signal handlers configurados para graceful shutdown"
+                  << std::endl;
+    }
+
+    bool should_shutdown() const { return shutdown_requested_.load(); }
 
     // =========================================================================
     // Membros

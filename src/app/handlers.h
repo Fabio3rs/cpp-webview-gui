@@ -62,6 +62,7 @@ class HandlerRegistry {
 // =============================================================================
 
 inline void setup(webview::webview &w, const HandlerRegistry &handlers) {
+    // Handlers que retornam JSON estruturado - mantêm bind_typed
     bindings::bind_typed(w, "ping",
                          [&handlers](std::optional<std::string> msg) {
                              return handlers.ping(msg);
@@ -72,8 +73,58 @@ inline void setup(webview::webview &w, const HandlerRegistry &handlers) {
         return handlers.open_file(path);
     });
 
-    // Exemplo para handlers que preferem JSON bruto:
-    // bindings::bind_json(w, "nomeNoJS", [](const json &args) { ... });
+    // =============================================================================
+    // Exemplos de bind_generic - handlers que retornam qualquer tipo
+    // conversível para JSON
+    // =============================================================================
+
+    // Exemplo: migrando getVersion para bind_generic (mantém compatibilidade
+    // JSON) bindings::bind_generic(w, "getVersion", [&handlers]() {
+    //     return handlers.get_version();  // Retorna json diretamente
+    // });
+
+    // Tipos simples - usando bind_generic para flexibilidade
+    bindings::bind_generic(w, "getCounter", []() { return 42; });
+    bindings::bind_generic(w, "getPi", []() { return 3.14159; });
+    bindings::bind_generic(w, "getStatus",
+                           []() { return std::string("online"); });
+    bindings::bind_generic(w, "isReady", []() { return true; });
+
+    // JSON - retorna diretamente (sem embrulho)
+    bindings::bind_generic(w, "getConfig", []() {
+        return nlohmann::json{{"theme", "dark"}, {"lang", "pt-br"}};
+    });
+
+    // Para tipos customizados, especialize to_json_value:
+    // namespace app::bindings {
+    //   template<>
+    //   inline json to_json_value(const MeuTipo &v) { return json{{"field",
+    //   v.field}}; }
+    // }
+
+    // Exemplo de tipo customizado com especialização
+    struct AppInfo {
+        std::string name;
+        int version;
+        bool debug;
+    };
+
+    // Especialização para AppInfo
+    // namespace app::bindings {
+    //   template<>
+    //   inline json to_json_value(const AppInfo &info) {
+    //       return json{
+    //           {"name", info.name},
+    //           {"version", info.version},
+    //           {"debug", info.debug}
+    //       };
+    //   }
+    // }
+
+    // Handler que retorna AppInfo (comentado para não conflitar)
+    // bindings::bind_generic(w, "getAppInfo", []() {
+    //     return AppInfo{"My App", 1, true};
+    // });
 }
 
 } // namespace app

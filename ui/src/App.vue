@@ -5,6 +5,7 @@ const message = ref('')
 const response = ref('')
 const history = ref([])
 const counter = ref(0)
+const genericResponse = ref('')
 
 const historyCount = computed(() => history.value.length)
 
@@ -13,7 +14,8 @@ async function sendMessage() {
 
     try {
         if (window.ping) {
-            window.ping(message.value)
+            console.log("Enviando mensagem:", message.value);
+            console.log("Resposta:", JSON.stringify(await window.ping(message.value)));
             history.value.push({
                 id: Date.now(),
                 text: message.value,
@@ -40,6 +42,37 @@ function decrement() {
 function clearHistory() {
     history.value = []
     response.value = ''
+}
+
+async function testGeneric(handlerName) {
+    try {
+        if (window[handlerName]) {
+            const result = await window[handlerName]()
+            console.log(`${handlerName}:`, JSON.stringify(result))
+
+            // Formato padronizado: {"ok": true, "data": ...} ou {"ok": false, "error": {...}}
+            if (result.ok) {
+                const data = result.data;
+                let displayValue;
+                if (typeof data === 'number') {
+                    displayValue = `${data} (number)`;
+                } else if (typeof data === 'boolean') {
+                    displayValue = `${data} (boolean)`;
+                } else if (typeof data === 'string') {
+                    displayValue = `"${data}" (string)`;
+                } else {
+                    displayValue = `${JSON.stringify(data)} (object)`;
+                }
+                genericResponse.value = `✅ ${handlerName}: ${displayValue}`;
+            } else {
+                genericResponse.value = `❌ Erro em ${handlerName}: ${result.error.message}`;
+            }
+        } else {
+            genericResponse.value = `❌ Handler ${handlerName} não encontrado`
+        }
+    } catch (error) {
+        genericResponse.value = `❌ Erro em ${handlerName}: ${error.message}`
+    }
 }
 </script>
 
@@ -70,6 +103,19 @@ function clearHistory() {
                 <button @click="sendMessage">Enviar</button>
             </div>
             <p v-if="response" class="response">{{ response }}</p>
+        </section>
+
+        <!-- Teste dos novos handlers genéricos -->
+        <section class="card">
+            <h2>🔧 Handlers Genéricos</h2>
+            <div class="button-grid">
+                <button @click="testGeneric('getCounter')">Contador (int)</button>
+                <button @click="testGeneric('getPi')">Pi (double)</button>
+                <button @click="testGeneric('getStatus')">Status (string)</button>
+                <button @click="testGeneric('isReady')">Pronto? (bool)</button>
+                <button @click="testGeneric('getConfig')">Config (JSON)</button>
+            </div>
+            <p v-if="genericResponse" class="response">{{ genericResponse }}</p>
         </section>
 
         <!-- Histórico -->
@@ -261,6 +307,20 @@ button:hover {
 
 .history-list li:last-child {
     border-bottom: none;
+}
+
+/* Grid de botões para handlers genéricos */
+.button-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.button-grid button {
+    padding: 0.5rem;
+    font-size: 0.9rem;
+    white-space: nowrap;
 }
 
 .time {

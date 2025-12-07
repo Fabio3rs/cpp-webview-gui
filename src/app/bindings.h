@@ -78,6 +78,66 @@ inline void bind_raw(webview::webview &w, std::string name,
 }
 
 // =============================================================================
+// to_json_value - conversão direta para valores JSON (mais eficiente)
+// =============================================================================
+
+// Base para tipos aritméticos - converte diretamente para JSON
+template <typename T>
+std::enable_if_t<std::is_arithmetic_v<T>, json> to_json_value(const T &value) {
+    return json(value);
+}
+
+// std::string - converte diretamente para JSON string
+inline json to_json_value(const std::string &value) { return json(value); }
+
+// const char* - converte para JSON string
+inline json to_json_value(const char *value) {
+    return json(value ? std::string(value) : std::string());
+}
+
+// bool - converte diretamente para JSON bool
+inline json to_json_value(bool value) { return json(value); }
+
+// nlohmann::json - retorna diretamente
+inline const json &to_json_value(const json &value) { return value; }
+
+// Permite especialização para tipos customizados pelo usuário
+// Exemplo:
+// namespace app::bindings {
+//   template<>
+//   inline json to_json_value(const MeuTipo &v) { return json{{"field",
+//   v.field}}; }
+// }
+
+// =============================================================================
+// bind_generic - permite qualquer retorno conversível para JSON
+// =============================================================================
+template <typename F>
+void bind_generic(webview::webview &w, std::string name, F &&func) {
+    using Callable = std::decay_t<F>;
+    using ResultType = std::decay_t<decltype(std::declval<Callable>()())>;
+
+    w.bind(std::move(name), [callable = Callable(std::forward<F>(func))](
+                                [[maybe_unused]] const std::string &args_str) {
+        // Ignora os args, só chama o handler
+        try {
+            auto result = callable();
+
+            // Formato padronizado: {"ok": true, "data": ...}
+            if constexpr (std::is_same_v<ResultType, json>) {
+                return ok(result).dump();
+            } else {
+                // Para tipos não-JSON, converte diretamente para valor JSON
+                return ok(to_json_value(result)).dump();
+            }
+        } catch (const std::exception &e) {
+            // Formato padronizado: {"ok": false, "error": {"message": "..."}}
+            return error(e.what(), ErrorCode::InternalError).dump();
+        }
+    });
+}
+
+// =============================================================================
 // Camada 1 - Handlers que recebem/retornam json
 // =============================================================================
 
@@ -239,7 +299,7 @@ void bind_typed(webview::webview &w, std::string name, F &&func) {
     using result_t = typename traits::result_type;
 
     // Assert para invariants (NASA-style)
-    static_assert(traits::arity <= 10,
+    static_assert(traits::arity <= 32,
                   "Too many arguments for binding"); // Bounded arity
 
     bind_json(
