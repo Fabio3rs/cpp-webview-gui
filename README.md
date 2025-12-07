@@ -349,6 +349,38 @@ WebKitGTK has known leaks. Use the wrapper script:
 ./build/bin/run.sh
 ```
 
+## macOS: problema com std::jthread / std::stop_token
+
+Se você está vendo erros como "no type named 'stop_token' in namespace 'std'" ou
+"no member named 'jthread' in namespace 'std'" em macOS, é provável que o
+clang/stdlib do sistema seja antigo e não ofereça suporte completo ao C++20
+usado no projeto. Uma solução simples é instalar uma versão recente do
+LLVM/Clang via Homebrew e usar o arquivo de toolchain CMake fornecido.
+
+Passos rápidos:
+
+1. Instale LLVM via Homebrew (Apple Silicon recomenda o prefixo /opt/homebrew):
+
+```bash
+brew install llvm
+```
+
+2. Configure o CMake para usar o clang/clang++ do Homebrew:
+
+```bash
+cmake -B build -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE=cmake/clang_toolchain.cmake \
+  -DCLANG_BIN_DIR=/opt/homebrew/opt/llvm/bin
+
+cmake --build build
+```
+
+Se o Homebrew estiver instalado em outro prefixo (por exemplo `/usr/local`),
+ajuste `CLANG_BIN_DIR` para apontar para o diretório `bin` do LLVM.
+
+Observação: o `CMakeLists.txt` agora detecta e avisa se `std::jthread`/
+`std::stop_token` não estão disponíveis e recomenda o uso do toolchain acima.
+
 ## License
 
 MIT License - See [LICENSE](LICENSE) for details.

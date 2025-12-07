@@ -10,6 +10,20 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Verifica se o compilador suporta std::jthread e std::stop_token (C++20)
+include(CheckCXXSourceCompiles)
+check_cxx_source_compiles(
+    "#include <thread>\n#include <stop_token>\nint main(){ std::jthread t; (void)t; return 0; }"
+    HAVE_STD_JTHREAD)
+if(NOT HAVE_STD_JTHREAD)
+    message(WARNING "O compilador atual não parece suportar std::jthread/std::stop_token.\n"
+                    "Possíveis soluções:\n"
+                    "  * Em macOS: instale LLVM via Homebrew e reconfigure com o toolchain fornecido.\n"
+                    "    cmake -B build -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/clang_toolchain.cmake \\n+          -DCLANG_BIN_DIR=/opt/homebrew/opt/llvm/bin\n"
+                    "  * Em Linux: garanta que o libstdc++/libc++ compatível com C++20 esteja sendo usado.\n"
+                    "  * Como alternativa temporária (não recomendado), substitua o código que usa jthread por std::thread + flags de sincronização.\n")
+endif()
+
 # ==============================================================================
 # Diretórios de saída
 # ==============================================================================

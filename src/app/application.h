@@ -9,16 +9,14 @@
 #include "dev_server.h"
 #include "webview/webview.h"
 #include <atomic>
-#include <chrono>
 #include <condition_variable>
 #include <csignal>
 #include <iostream>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
-#include <stop_token>
+#include "app/shutdown_monitor.h"
 #include <string>
-#include <thread>
 
 // Em produção, inclui o header com o HTML embutido
 #ifndef APP_DEV_MODE
@@ -74,53 +72,17 @@ class Application {
             load_content();
             std::cout << "[APP] Iniciando event loop..." << std::endl;
 
-            // Inicia thread de monitoramento para shutdown graceful
-            auto shutdownMonitor = [this](std::stop_token stoken) {
-                try {
-                    std::unique_lock<std::mutex> lock(shutdown_mutex_);
-                    // Espera até que shutdown seja solicitado ou thread seja
-                    // parada
-                    auto shutdownCondition = [this, stoken]() {
-                        return should_shutdown() || stoken.stop_requested();
-                    };
-                    while (!shutdownCondition()) {
-                        // O timeout garante que não fique bloqueado para sempre
-                        // caso algo imprevisto aconteça
-                        shutdown_cv_.wait_for(lock, std::chrono::seconds(5),
-                                              shutdownCondition);
-                        std::this_thread::yield();
-                    }
-
-                    // Só termina a janela se foi um shutdown solicitado (sinal)
-                    if (should_shutdown()) {
-                        std::cout << "[APP] Shutdown solicitado, terminando..."
-                                  << std::endl;
+            // Inicia ShutdownMonitor (classe separada)
+            ShutdownMonitor shutdown_monitor(
+                [this]() { return should_shutdown(); },
+                [this]() {
+                    if (window_) {
                         window_->terminate();
                     }
-                    // Se foi stop_token, é saída normal, apenas sai
-                } catch (const std::exception &e) {
-                    std::cerr << "[APP] Erro no shutdown monitor: " << e.what()
-                              << std::endl;
-                }
-            };
-
-            std::jthread shutdown_monitor(shutdownMonitor);
+                });
 
             // Executa o loop principal da webview
             window_->run();
-
-            // Notifica a condition variable para liberar a thread na saída
-            // normal
-            shutdown_monitor.request_stop();
-            shutdown_cv_.notify_all();
-
-            // jthread junta automaticamente no destrutor
-
-            // Verifica se terminou por shutdown graceful
-            if (should_shutdown()) {
-                std::cout << "[APP] Shutdown graceful concluído" << std::endl;
-                return 0;
-            }
         } catch (const webview::exception &e) {
             std::cerr << "[APP] Erro WebView: " << e.what() << std::endl;
             shutdown_cv_.notify_all();
