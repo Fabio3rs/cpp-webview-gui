@@ -87,16 +87,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Install Ninja
         run: brew install ninja
 
-      - name: Install LLVM (Homebrew)
+      - name: Install LLVM via Homebrew
         run: |
           brew update
-          brew install llvm@20
-          LLVM_PREFIX="$(brew --prefix llvm@20)"
+          brew install llvm
+          LLVM_PREFIX="$(brew --prefix llvm)"
           echo "LLVM_PREFIX=$LLVM_PREFIX" >> "$GITHUB_ENV"
-          echo "CLANG_BIN_DIR=$LLVM_PREFIX/bin" >> "$GITHUB_ENV"
+          # Put LLVM clang in front of PATH
+          echo "$LLVM_PREFIX/bin" >> "$GITHUB_PATH"
+          {
+            echo "CC=$LLVM_PREFIX/bin/clang"
+            echo "CXX=$LLVM_PREFIX/bin/clang++"
+            echo "CPPFLAGS=-I$LLVM_PREFIX/include"
+            echo "CXXFLAGS=-std=c++20 -fexperimental-library"
+            echo "LDFLAGS=-L$LLVM_PREFIX/lib -L$LLVM_PREFIX/lib/c++ -L$LLVM_PREFIX/lib/unwind -Wl,-rpath,$LLVM_PREFIX/lib/c++ -lunwind -lc++"
+          } >> "$GITHUB_ENV"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -109,14 +117,23 @@ jobs:
         run: npm install
         working-directory: ui
 
-      - name: Configure CMake (LLVM Homebrew)
+      - name: Show clang version
         run: |
-          cmake -B build -G Ninja \
+          which clang++
+          clang++ --version
+
+      - name: Configure (CMake)
+        run: |
+          cmake -S . -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DDEV_MODE=OFF \
             -DENABLE_SANITIZERS=ON \
-            -DCMAKE_TOOLCHAIN_FILE=cmake/clang_toolchain.cmake \
-            -DCLANG_BIN_DIR="$CLANG_BIN_DIR"
+            -DCMAKE_C_COMPILER="$CC" \
+            -DCMAKE_CXX_COMPILER="$CXX" \
+            -DCMAKE_CXX_STANDARD=20 \
+            -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
+            -DCMAKE_EXE_LINKER_FLAGS="$LDFLAGS" \
+            -DCMAKE_SHARED_LINKER_FLAGS="$LDFLAGS"
 
       - name: Build
         run: cmake --build build --parallel
