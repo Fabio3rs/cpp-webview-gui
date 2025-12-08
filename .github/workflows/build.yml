@@ -82,6 +82,16 @@ jobs:
 
   build-macos:
     runs-on: macos-latest
+    env:
+      # Common Homebrew LLVM prefix on GitHub macOS runners (ARM). This is a
+      # reasonable default so CMake sees compilers even before any install step.
+      CC: /opt/homebrew/opt/llvm/bin/clang
+      CXX: /opt/homebrew/opt/llvm/bin/clang++
+      AR: /opt/homebrew/opt/llvm/bin/llvm-ar
+      RANLIB: /opt/homebrew/opt/llvm/bin/llvm-ranlib
+      CPPFLAGS: -I/opt/homebrew/opt/llvm/include
+      CXXFLAGS: -std=c++20 -fexperimental-library
+      LDFLAGS: -L/opt/homebrew/opt/llvm/lib -L/opt/homebrew/opt/llvm/lib/c++ -L/opt/homebrew/opt/llvm/lib/unwind -Wl,-rpath,/opt/homebrew/opt/llvm/lib/c++ -lunwind
 
     steps:
       - name: Checkout
@@ -126,6 +136,8 @@ jobs:
         run: |
           which clang++
           clang++ --version
+          $CC --version
+          $CXX --version
 
       - name: Clean build directory
         run: rm -rf build || true
