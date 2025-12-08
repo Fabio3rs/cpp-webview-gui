@@ -101,10 +101,15 @@ jobs:
           {
             echo "CC=$LLVM_PREFIX/bin/clang"
             echo "CXX=$LLVM_PREFIX/bin/clang++"
+            echo "AR=$LLVM_PREFIX/bin/llvm-ar"
+            echo "RANLIB=$LLVM_PREFIX/bin/llvm-ranlib"
             echo "CPPFLAGS=-I$LLVM_PREFIX/include"
             echo "CXXFLAGS=-std=c++20 -fexperimental-library"
-            echo "LDFLAGS=-L$LLVM_PREFIX/lib -L$LLVM_PREFIX/lib/c++ -L$LLVM_PREFIX/lib/unwind -Wl,-rpath,$LLVM_PREFIX/lib/c++ -lunwind -lc++"
-          } >> "$GITHUB_ENV"
+            # Do not add -lc++ explicitly to LDFLAGS to avoid duplicate -lc++ warnings;
+            # provide library/search paths and libunwind. clang++ will still link libc++.
+            echo "LDFLAGS=-L$LLVM_PREFIX/lib -L$LLVM_PREFIX/lib/c++ -L$LLVM_PREFIX/lib/unwind -Wl,-rpath,$LLVM_PREFIX/lib/c++ -lunwind" \
+              >> "$GITHUB_ENV"
+          }
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -122,6 +127,9 @@ jobs:
           which clang++
           clang++ --version
 
+      - name: Clean build directory
+        run: rm -rf build || true
+
       - name: Configure (CMake)
         run: |
           cmake -S . -B build \
@@ -130,6 +138,8 @@ jobs:
             -DENABLE_SANITIZERS=ON \
             -DCMAKE_C_COMPILER="$CC" \
             -DCMAKE_CXX_COMPILER="$CXX" \
+            -DCMAKE_AR="$AR" \
+            -DCMAKE_RANLIB="$RANLIB" \
             -DCMAKE_CXX_STANDARD=20 \
             -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
             -DCMAKE_EXE_LINKER_FLAGS="$LDFLAGS" \
