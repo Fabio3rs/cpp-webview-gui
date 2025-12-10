@@ -3,7 +3,7 @@
 // App Handlers - Handlers específicos desta aplicação
 // =============================================================================
 
-#include "app/bindings.h"
+#include "app/bindings_with_meta.h"
 #include "app/config.h"
 
 namespace app {
@@ -63,13 +63,12 @@ class HandlerRegistry {
 
 inline void setup(webview::webview &w, const HandlerRegistry &handlers) {
     // Handlers que retornam JSON estruturado - mantêm bind_typed
-    bindings::bind_typed(w, "ping",
-                         [&handlers](std::optional<std::string> msg) {
-                             return handlers.ping(msg);
-                         });
-    bindings::bind_typed(w, "getVersion",
-                         [&handlers]() { return handlers.get_version(); });
-    bindings::bind_typed(w, "openFile", [&handlers](const std::string &path) {
+    APP_BIND_TYPED(w, "ping", [&handlers](std::optional<std::string> msg) {
+        return handlers.ping(msg);
+    });
+    APP_BIND_TYPED(w, "getVersion",
+                   [&handlers]() { return handlers.get_version(); });
+    APP_BIND_TYPED(w, "openFile", [&handlers](const std::string &path) {
         return handlers.open_file(path);
     });
 
@@ -84,16 +83,16 @@ inline void setup(webview::webview &w, const HandlerRegistry &handlers) {
     // });
 
     // Tipos simples - usando bind_generic para flexibilidade
-    bindings::bind_generic(w, "getCounter", []() { return 42; });
-    bindings::bind_generic(w, "getPi", []() { return 3.14159; });
-    bindings::bind_generic(w, "getStatus",
-                           []() { return std::string("online"); });
-    bindings::bind_generic(w, "isReady", []() { return true; });
+    APP_BIND_TYPED(w, "getCounter", []() { return 42; });
+    APP_BIND_TYPED(w, "getPi", []() { return 3.14159; });
+    APP_BIND_TYPED(w, "getStatus", []() { return std::string("online"); });
+    APP_BIND_TYPED(w, "isReady", []() { return true; });
 
     // JSON - retorna diretamente (sem embrulho)
-    bindings::bind_generic(w, "getConfig", []() {
-        return nlohmann::json{{"theme", "dark"}, {"lang", "pt-br"}};
-    });
+    APP_BIND_TYPED(w, "getConfig", ([]() {
+                       return nlohmann::json{{"theme", "dark"},
+                                             {"lang", "pt-br"}};
+                   }));
 
     // Para tipos customizados, especialize to_json_value:
     // namespace app::bindings {

@@ -361,6 +361,29 @@ target_link_libraries(${PROJECT_NAME}_lib PUBLIC
 # Aplicar flags de warning
 target_compile_options(${PROJECT_NAME}_lib PRIVATE ${PROJECT_WARNING_FLAGS})
 
+################################################################################
+# Tool: emit_native_bindings - gera .d.ts e native-bindings.json para o plugin TS
+################################################################################
+add_executable(emit_native_bindings tools/emit_native_bindings.cpp)
+target_link_libraries(emit_native_bindings PRIVATE ${PROJECT_NAME}_lib)
+target_include_directories(emit_native_bindings PRIVATE
+    "${CMAKE_SOURCE_DIR}/src"
+    "${CMAKE_SOURCE_DIR}/include"
+)
+
+set(NATIVE_BINDINGS_DTS "${CMAKE_SOURCE_DIR}/ui/src/generated/native-bindings.d.ts")
+set(NATIVE_BINDINGS_JSON "${CMAKE_SOURCE_DIR}/ui/src/generated/native-bindings.json")
+
+add_custom_command(TARGET emit_native_bindings POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/ui/src/generated"
+    # Copy the project-level suppressions into the runtime output dir for the
+    # emitted binary to reference.
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/.asan_suppressions" "$<TARGET_FILE_DIR:emit_native_bindings>/.asan_suppressions"
+    # Run the tool with LSAN_OPTIONS pointing to the copied suppressions file.
+    COMMAND ${CMAKE_COMMAND} -E env "LSAN_OPTIONS=suppressions=$<TARGET_FILE_DIR:emit_native_bindings>/.asan_suppressions" $<TARGET_FILE:emit_native_bindings> "${NATIVE_BINDINGS_DTS}" "${NATIVE_BINDINGS_JSON}"
+    COMMENT "Gerando declarações TS e índice de bindings nativos"
+)
+
 # ==============================================================================
 # Target principal (executável)
 # ==============================================================================
