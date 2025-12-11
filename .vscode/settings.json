@@ -10,5 +10,10 @@
     },
     "terminal.integrated.env.windows": {
         "ASAN_OPTIONS": "detect_leaks=0"
-    }
+    },
+    "typescript.tsdk": "ui/node_modules/typescript/lib",
+    "typescript.enablePromptUseWorkspaceTsdk": true,
+    "typescript.tsserver.pluginPaths": [
+        "./ui/node_modules"
+    ]
 }

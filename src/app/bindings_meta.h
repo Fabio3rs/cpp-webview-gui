@@ -24,7 +24,9 @@ struct BindingMeta {
     std::string name;
     std::string return_ts;
     std::vector<std::string> args_ts;
-    CppLocation cpp;
+    // Support a begin/end range so tools can map to an implementation span
+    CppLocation cpp_begin;
+    CppLocation cpp_end;
 };
 
 inline std::vector<BindingMeta> &registry() {
@@ -80,16 +82,21 @@ inline void fill_arg_types(std::vector<std::string> &out,
 template <typename F>
 inline void register_binding_meta(
     std::string_view jsName,
-    std::source_location loc = std::source_location::current()) {
+    std::source_location begin = std::source_location::current(),
+    std::source_location end = std::source_location::current()) {
     using traits = function_traits<std::decay_t<F>>;
     BindingMeta meta;
     meta.name = std::string(jsName);
     meta.return_ts = TsType<std::decay_t<typename traits::result_type>>::name();
     meta.args_ts.reserve(traits::arity);
     fill_arg_types<F>(meta.args_ts, std::make_index_sequence<traits::arity>{});
-    meta.cpp.file = loc.file_name();
-    meta.cpp.line = static_cast<std::uint32_t>(loc.line());
-    meta.cpp.column = static_cast<std::uint32_t>(loc.column());
+    meta.cpp_begin.file = begin.file_name();
+    meta.cpp_begin.line = static_cast<std::uint32_t>(begin.line());
+    meta.cpp_begin.column = static_cast<std::uint32_t>(begin.column());
+
+    meta.cpp_end.file = end.file_name();
+    meta.cpp_end.line = static_cast<std::uint32_t>(end.line());
+    meta.cpp_end.column = static_cast<std::uint32_t>(end.column());
     registry().push_back(std::move(meta));
 }
 
@@ -111,9 +118,14 @@ inline void dump_typescript_and_index(std::ostream &dts,
 
     json idx = json::object();
     for (const auto &b : regs) {
-        idx[b.name] = {{"file", b.cpp.file},
-                       {"line", b.cpp.line},
-                       {"column", b.cpp.column}};
+        json loc = json::object();
+        loc["begin"] = {{"file", b.cpp_begin.file},
+                        {"line", b.cpp_begin.line},
+                        {"column", b.cpp_begin.column}};
+        loc["end"] = {{"file", b.cpp_end.file},
+                      {"line", b.cpp_end.line},
+                      {"column", b.cpp_end.column}};
+        idx[b.name] = loc;
     }
     json_out << idx.dump(2);
 }

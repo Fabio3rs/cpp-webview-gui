@@ -9,6 +9,8 @@
     "preview": "vite preview"
   },
   "devDependencies": {
+    "app-native-bindings-plugin": "file:tools/native-bindings-plugin",
+    "typescript": "^5.9.3",
     "vite": "^6.0.0",
     "vite-plugin-singlefile": "^2.3.0"
   },

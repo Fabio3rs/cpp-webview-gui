@@ -1,42 +1,98 @@
 {
   "getConfig": {
-    "column": 22,
-    "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
-    "line": 95
+    "begin": {
+      "column": 22,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
+      "line": 95
+    },
+    "end": {
+      "column": 22,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
+      "line": 95
+    }
   },
   "getCounter": {
-    "column": 56,
-    "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
-    "line": 86
+    "begin": {
+      "column": 56,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
+      "line": 86
+    },
+    "end": {
+      "column": 56,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
+      "line": 86
+    }
   },
   "getPi": {
-    "column": 56,
-    "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
-    "line": 87
+    "begin": {
+      "column": 56,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
+      "line": 87
+    },
+    "end": {
+      "column": 56,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
+      "line": 87
+    }
   },
   "getStatus": {
-    "column": 74,
-    "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
-    "line": 88
+    "begin": {
+      "column": 74,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
+      "line": 88
+    },
+    "end": {
+      "column": 74,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
+      "line": 88
+    }
   },
   "getVersion": {
-    "column": 68,
-    "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
-    "line": 70
+    "begin": {
+      "column": 68,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
+      "line": 70
+    },
+    "end": {
+      "column": 68,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
+      "line": 70
+    }
   },
   "isReady": {
-    "column": 55,
-    "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
-    "line": 89
+    "begin": {
+      "column": 55,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
+      "line": 89
+    },
+    "end": {
+      "column": 55,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
+      "line": 89
+    }
   },
   "openFile": {
-    "column": 6,
-    "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
-    "line": 73
+    "begin": {
+      "column": 6,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
+      "line": 73
+    },
+    "end": {
+      "column": 6,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
+      "line": 73
+    }
   },
   "ping": {
-    "column": 6,
-    "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
-    "line": 68
+    "begin": {
+      "column": 6,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
+      "line": 68
+    },
+    "end": {
+      "column": 6,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
+      "line": 68
+    }
   }
 }

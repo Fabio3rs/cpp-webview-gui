@@ -1,14 +1,26 @@
 {
-  "compilerOptions": {
-    "target": "ES2020",
-    "module": "ESNext",
-    "moduleResolution": "Node",
-    "skipLibCheck": true,
-    "allowJs": true,
-    "checkJs": false
-  },
-  "include": [
-    "src",
-    "src/generated/native-bindings.d.ts"
-  ]
+    "compilerOptions": {
+        "target": "ES2020",
+        "module": "ESNext",
+        "moduleResolution": "Node",
+        "skipLibCheck": true,
+        "allowJs": true,
+        "checkJs": false,
+        "rootDir": "src",
+        "outDir": "dist",
+        "declaration": false,
+        "plugins": [
+            {
+                "name": "app-native-bindings-plugin"
+            }
+        ],
+    },
+    "include": [
+        "src",
+        "src/generated/native-bindings.d.ts"
+    ],
+    "exclude": [
+        "dist",
+        "node_modules"
+    ]
 }
