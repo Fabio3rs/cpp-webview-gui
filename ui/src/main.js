@@ -4,6 +4,8 @@ import { registerDockPanels } from './dock_panels'
 import 'dockview-vue/dist/styles/dockview.css'
 import './style.css'
 
+const nativeWindowProxies = new Map()
+
 function parseWindowFeatures(features) {
   if (!features || typeof features !== 'string') {
     return {}
@@ -25,14 +27,22 @@ function createWindowProxy(createPromise) {
   let closed = false
   const pendingEvents = []
 
+  const markClosed = () => {
+    closed = true
+    if (windowId) {
+      nativeWindowProxies.delete(windowId)
+    }
+  }
+
   const resolveId = async () => {
     if (windowId || !createPromise) return windowId
     const result = await createPromise
     if (!result?.ok) {
-      closed = true
+      markClosed()
       return null
     }
     windowId = result.data
+    nativeWindowProxies.set(windowId, markClosed)
     while (pendingEvents.length > 0) {
       const event = pendingEvents.shift()
       if (event && window.postNativeEvent) {
@@ -57,7 +67,7 @@ function createWindowProxy(createPromise) {
       return closed
     },
     close() {
-      closed = true
+      markClosed()
       resolveId().then((id) => {
         if (id && window.closeNativeWindow) {
           window.closeNativeWindow(id)
@@ -85,7 +95,15 @@ function installNativeWindowOpen() {
     : null
 
   window.open = (url = '', target = '', features = '') => {
-    if (!window.createNativeWindow) {
+    const normalizedTarget = (target || '').toString()
+    const lowerTarget = normalizedTarget.toLowerCase()
+    const shouldFallback =
+      !window.createNativeWindow ||
+      lowerTarget === '_self' ||
+      lowerTarget === '_parent' ||
+      lowerTarget === '_top'
+
+    if (shouldFallback) {
       return originalOpen ? originalOpen(url, target, features) : null
     }
 
@@ -113,13 +131,26 @@ function installNativeMessageBridge() {
   window.__nativeMessageBridgeInstalled = true
   window.addEventListener('native-event', (event) => {
     const detail = event?.detail
-    if (!detail || detail.type !== 'message') return
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        data: detail.payload,
-        origin: detail.origin || ''
-      })
-    )
+    if (!detail) return
+
+    if (detail.type === 'message') {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: detail.payload,
+          origin: detail.origin || ''
+        })
+      )
+      return
+    }
+
+    if (
+      (detail.type === 'native-window.closed' ||
+        detail.type === 'native-window.error') &&
+      detail.windowId
+    ) {
+      const closer = nativeWindowProxies.get(detail.windowId)
+      if (closer) closer()
+    }
   })
 }
 

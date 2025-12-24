@@ -104,8 +104,16 @@ std::optional<ScreenRect> get_window_bounds(void *handle) {
         NSSize size;
     };
 
-    auto frame = reinterpret_cast<NSRect (*)(id, SEL)>(objc_msgSend)(
+    // On x86_64, structs larger than 16 bytes must use objc_msgSend_stret.
+    NSRect frame{};
+#if defined(__x86_64__)
+    using SendStret = void (*)(NSRect *, id, SEL);
+    auto send_frame = reinterpret_cast<SendStret>(objc_msgSend_stret);
+    send_frame(&frame, static_cast<id>(handle), sel_registerName("frame"));
+#else
+    frame = reinterpret_cast<NSRect (*)(id, SEL)>(objc_msgSend)(
         static_cast<id>(handle), sel_registerName("frame"));
+#endif
     return ScreenRect{static_cast<int>(frame.origin.x),
                       static_cast<int>(frame.origin.y),
                       static_cast<int>(frame.size.width),

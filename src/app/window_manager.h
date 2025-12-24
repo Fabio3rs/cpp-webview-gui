@@ -9,6 +9,7 @@
 #include <atomic>
 #include <cmath>
 #include <functional>
+#include <iostream>
 #include <memory>
 #include <mutex>
 #include <nlohmann/json.hpp>
@@ -146,6 +147,7 @@ class WindowManager {
 
         main_window_.dispatch([this, window_id] {
             std::unique_ptr<webview::webview> window;
+            bool removed = false;
             {
                 std::lock_guard<std::mutex> lock(mu_);
                 auto it = windows_.find(window_id);
@@ -155,6 +157,11 @@ class WindowManager {
                 window = std::move(it->second);
                 windows_.erase(it);
                 window_info_.erase(window_id);
+                removed = true;
+            }
+            if (removed) {
+                emit_main_event({{"type", "native-window.closed"},
+                                 {"windowId", window_id}});
             }
         });
         return true;
@@ -396,6 +403,30 @@ class WindowManager {
 #endif
     }
 
+    void emit_main_event(const json &detail) {
+        const std::string payload = detail.dump();
+        main_window_.dispatch([this, payload]() {
+            main_window_.eval("window.dispatchEvent(new CustomEvent("
+                              "'native-event', { detail: " +
+                              payload + " }));");
+        });
+    }
+
+    void handle_window_creation_failure(const std::string &window_id,
+                                        const std::string &message) {
+        {
+            std::lock_guard<std::mutex> lock(mu_);
+            bootstraps_.erase(window_id);
+            windows_.erase(window_id);
+            window_info_.erase(window_id);
+        }
+        std::cerr << "[WindowManager] Failed to create window '" << window_id
+                  << "': " << message << std::endl;
+        emit_main_event({{"type", "native-window.error"},
+                         {"windowId", window_id},
+                         {"message", message}});
+    }
+
     void create_window_on_ui_thread(const std::string &window_id) {
         json bootstrap_snapshot;
         {
@@ -408,26 +439,34 @@ class WindowManager {
 
         const WindowConfig cfg =
             resolve_window_config(bootstrap_snapshot, window_id);
-        auto window = std::make_unique<webview::webview>(dev_mode_, nullptr);
-        window->set_title(cfg.title);
-        window->set_size(cfg.width, cfg.height, WEBVIEW_HINT_NONE);
-        apply_window_position(*window, cfg);
-        auto parent_handle = main_window_.window();
-        auto child_handle = window->window();
-        if (parent_handle.ok() && child_handle.ok()) {
-            attach_window_to_parent(parent_handle.value(),
-                                    child_handle.value());
-        }
 
-        if (bindings_setup_) {
-            bindings_setup_(*window);
-        }
-        load_content(*window, window_id, bootstrap_snapshot);
+        try {
+            auto window =
+                std::make_unique<webview::webview>(dev_mode_, nullptr);
+            window->set_title(cfg.title);
+            window->set_size(cfg.width, cfg.height, WEBVIEW_HINT_NONE);
+            apply_window_position(*window, cfg);
+            auto parent_handle = main_window_.window();
+            auto child_handle = window->window();
+            if (parent_handle.ok() && child_handle.ok()) {
+                attach_window_to_parent(parent_handle.value(),
+                                        child_handle.value());
+            }
 
-        {
-            std::lock_guard<std::mutex> lock(mu_);
-            windows_[window_id] = std::move(window);
-            window_info_[window_id] = WindowInfo{cfg.title};
+            if (bindings_setup_) {
+                bindings_setup_(*window);
+            }
+            load_content(*window, window_id, bootstrap_snapshot);
+
+            {
+                std::lock_guard<std::mutex> lock(mu_);
+                windows_[window_id] = std::move(window);
+                window_info_[window_id] = WindowInfo{cfg.title};
+            }
+        } catch (const std::exception &e) {
+            handle_window_creation_failure(window_id, e.what());
+        } catch (...) {
+            handle_window_creation_failure(window_id, "Unknown error");
         }
     }
 
