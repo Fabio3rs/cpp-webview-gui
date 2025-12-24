@@ -44,12 +44,12 @@ std::optional<ScreenPoint> get_cursor_position() {
         double y;
     };
 
-    id ns_event = objc_getClass("NSEvent");
+    Class ns_event = objc_getClass("NSEvent");
     if (!ns_event) {
         return std::nullopt;
     }
     auto point = reinterpret_cast<NSPoint (*)(id, SEL)>(objc_msgSend)(
-        ns_event, sel_registerName("mouseLocation"));
+        reinterpret_cast<id>(ns_event), sel_registerName("mouseLocation"));
     return ScreenPoint{static_cast<int>(point.x), static_cast<int>(point.y)};
 #elif defined(__linux__)
 #if GTK_MAJOR_VERSION >= 4
