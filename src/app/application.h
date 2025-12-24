@@ -6,6 +6,8 @@
 #include "app/cli_options.h"
 #include "app/config.h"
 #include "app/handlers.h"
+#include "app/shutdown_monitor.h"
+#include "app/window_manager.h"
 #include "dev_server.h"
 #include "webview/webview.h"
 #include <atomic>
@@ -15,11 +17,10 @@
 #include <memory>
 #include <mutex>
 #include <stdexcept>
-#include "app/shutdown_monitor.h"
 #include <string>
 
 // Em produção, inclui o header com o HTML embutido
-#ifndef APP_DEV_MODE
+#if !defined(APP_DEV_MODE) && !defined(APP_NO_EMBEDDED_UI)
 #include "embedded_resources.h"
 #endif
 
@@ -130,9 +131,15 @@ class Application {
             int height =
                 options_.height > 0 ? options_.height : config::WINDOW_HEIGHT;
             window_->set_size(width, height, WEBVIEW_HINT_NONE);
+            window_->init("window.__APP_WINDOW_ID__ = \"main\";");
 
-            // Setup bindings
-            app::setup(*window_, handlers_);
+            // Setup window manager and bindings
+            window_manager_ = std::make_unique<WindowManager>(
+                *window_, dev_mode_, dev_url_, options_.url, width, height,
+                config::WINDOW_TITLE);
+            window_manager_->set_bindings_setup(
+                [this](webview::webview &w) { setup_bindings(w); });
+            setup_bindings(*window_);
 
             return true;
         } catch (const webview::exception &e) {
@@ -155,8 +162,12 @@ class Application {
             std::cout << "[APP] Navegando para " << dev_url_ << std::endl;
             window_->navigate(dev_url_);
         } else {
-#ifdef APP_DEV_MODE
+#if defined(APP_DEV_MODE)
             throw std::runtime_error("Build de dev sem Vite server!");
+#elif defined(APP_NO_EMBEDDED_UI)
+            std::cout << "[APP] UI embutida indisponível, usando HTML vazio."
+                      << std::endl;
+            window_->set_html("<!doctype html><html><body></body></html>");
 #else
             std::cout << "[APP] Carregando HTML embutido..." << std::endl;
             window_->set_html(INDEX_HTML);
@@ -226,6 +237,63 @@ class Application {
 
     bool should_shutdown() const { return shutdown_requested_.load(); }
 
+    void setup_bindings(webview::webview &w) {
+        app::setup(w, handlers_);
+        if (!window_manager_) {
+            return;
+        }
+
+        APP_BIND_TYPED(w, "createNativeWindow",
+                       [this](app::bindings::json bootstrap) {
+                           return window_manager_->create_window(bootstrap);
+                       });
+        APP_BIND_TYPED(w, "getBootstrap", [this](const std::string &window_id) {
+            auto bootstrap = window_manager_->take_bootstrap(window_id);
+            if (!bootstrap) {
+                throw app::bindings::BindingError(
+                    "Bootstrap not found",
+                    app::bindings::ErrorCode::MissingArg);
+            }
+            return *bootstrap;
+        });
+        APP_BIND_TYPED(
+            w, "postNativeEvent",
+            [this](const std::string &window_id, app::bindings::json event) {
+                if (!window_manager_->post_event(window_id, event)) {
+                    throw app::bindings::BindingError(
+                        "Window not found",
+                        app::bindings::ErrorCode::MissingArg);
+                }
+            });
+        APP_BIND_TYPED(w, "closeNativeWindow",
+                       [this](const std::string &window_id) {
+                           if (!window_manager_->close_window(window_id)) {
+                               throw app::bindings::BindingError(
+                                   "Window not found",
+                                   app::bindings::ErrorCode::MissingArg);
+                           }
+                       });
+        APP_BIND_TYPED(w, "listNativeWindows",
+                       [this]() { return window_manager_->list_windows(); });
+        APP_BIND_TYPED(
+            w, "startNativeDrag",
+            [this](const std::string &window_id, app::bindings::json payload) {
+                window_manager_->start_drag_tracking(window_id, payload);
+            });
+        APP_BIND_TYPED(w, "completeNativeDrag",
+                       [this](const std::string &target_window_id) {
+                           return window_manager_->complete_drag_tracking(
+                               target_window_id);
+                       });
+        APP_BIND_TYPED(w, "stopNativeDrag",
+                       [this]() { window_manager_->stop_drag_tracking(); });
+        APP_BIND_TYPED(w, "completeNativeDragOutside",
+                       [this](const std::string &window_id) {
+                           return window_manager_->complete_drag_outside(
+                               window_id);
+                       });
+    }
+
     // =========================================================================
     // Membros
     // =========================================================================
@@ -236,6 +304,7 @@ class Application {
     dev::ServerProcess dev_server_;
     app::HandlerRegistry handlers_;
     std::unique_ptr<webview::webview> window_;
+    std::unique_ptr<WindowManager> window_manager_;
 };
 
 } // namespace app

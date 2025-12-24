@@ -1,4 +1,64 @@
 {
+  "closeNativeWindow": {
+    "begin": {
+      "column": 25,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
+      "line": 275
+    },
+    "end": {
+      "column": 25,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
+      "line": 275
+    }
+  },
+  "completeNativeDrag": {
+    "begin": {
+      "column": 25,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
+      "line": 287
+    },
+    "end": {
+      "column": 25,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
+      "line": 287
+    }
+  },
+  "completeNativeDragOutside": {
+    "begin": {
+      "column": 25,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
+      "line": 294
+    },
+    "end": {
+      "column": 25,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
+      "line": 294
+    }
+  },
+  "createNativeWindow": {
+    "begin": {
+      "column": 25,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
+      "line": 249
+    },
+    "end": {
+      "column": 25,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
+      "line": 249
+    }
+  },
+  "getBootstrap": {
+    "begin": {
+      "column": 10,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
+      "line": 258
+    },
+    "end": {
+      "column": 10,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
+      "line": 258
+    }
+  },
   "getConfig": {
     "begin": {
       "column": 22,
@@ -71,6 +131,18 @@
       "line": 89
     }
   },
+  "listNativeWindows": {
+    "begin": {
+      "column": 76,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
+      "line": 277
+    },
+    "end": {
+      "column": 76,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
+      "line": 277
+    }
+  },
   "openFile": {
     "begin": {
       "column": 6,
@@ -93,6 +165,42 @@
       "column": 6,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
       "line": 68
+    }
+  },
+  "postNativeEvent": {
+    "begin": {
+      "column": 14,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
+      "line": 267
+    },
+    "end": {
+      "column": 14,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
+      "line": 267
+    }
+  },
+  "startNativeDrag": {
+    "begin": {
+      "column": 14,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
+      "line": 282
+    },
+    "end": {
+      "column": 14,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
+      "line": 282
+    }
+  },
+  "stopNativeDrag": {
+    "begin": {
+      "column": 75,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
+      "line": 289
+    },
+    "end": {
+      "column": 75,
+      "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
+      "line": 289
     }
   }
 }

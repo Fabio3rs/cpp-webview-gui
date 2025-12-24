@@ -373,6 +373,7 @@ if(SHOULD_AUTO_EMIT_BINDINGS)
         "${CMAKE_SOURCE_DIR}/src"
         "${CMAKE_SOURCE_DIR}/include"
     )
+    target_compile_definitions(emit_native_bindings PRIVATE APP_NO_EMBEDDED_UI=1)
 
     set(NATIVE_BINDINGS_DTS "${CMAKE_SOURCE_DIR}/ui/src/generated/native-bindings.d.ts")
     set(NATIVE_BINDINGS_JSON "${CMAKE_SOURCE_DIR}/ui/src/generated/native-bindings.json")
