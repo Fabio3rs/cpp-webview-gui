@@ -3,13 +3,15 @@ import InspectorPanel from './panels/InspectorPanel.vue'
 import TimelinePanel from './panels/TimelinePanel.vue'
 import ConsolePanel from './panels/ConsolePanel.vue'
 import ScratchPanel from './panels/ScratchPanel.vue'
+import ViewportPanel from './panels/ViewportPanel.vue'
 
 export {
     WelcomePanel,
     InspectorPanel,
     TimelinePanel,
     ConsolePanel,
-    ScratchPanel
+    ScratchPanel,
+    ViewportPanel
 }
 
 export function registerDockPanels(app) {
@@ -18,4 +20,5 @@ export function registerDockPanels(app) {
     app.component('TimelinePanel', TimelinePanel)
     app.component('ConsolePanel', ConsolePanel)
     app.component('ScratchPanel', ScratchPanel)
+    app.component('ViewportPanel', ViewportPanel)
 }

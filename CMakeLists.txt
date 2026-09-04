@@ -331,6 +331,15 @@ endif()
 # ==============================================================================
 # Biblioteca do projeto (código testável separado do main)
 # ==============================================================================
+# Parser CLI header-only, reutilizável sem dependências da aplicação/WebView
+add_library(cli_parser INTERFACE)
+add_library(app::cli_parser ALIAS cli_parser)
+
+target_include_directories(cli_parser INTERFACE
+    "${CMAKE_SOURCE_DIR}/include"
+)
+target_compile_features(cli_parser INTERFACE cxx_std_20)
+
 # Coleta todos os .cpp em src/ exceto main.cpp
 file(GLOB_RECURSE LIB_SOURCES "${CMAKE_SOURCE_DIR}/src/*.cpp")
 list(FILTER LIB_SOURCES EXCLUDE REGEX ".*main\\.cpp$")
@@ -354,6 +363,7 @@ target_include_directories(${PROJECT_NAME}_lib SYSTEM PUBLIC
 
 # Link das bibliotecas externas
 target_link_libraries(${PROJECT_NAME}_lib PUBLIC
+    app::cli_parser
     webview::core
     nlohmann_json::nlohmann_json
 )

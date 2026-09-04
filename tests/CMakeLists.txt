@@ -1,4 +1,6 @@
-add_executable(${PROJECT_NAME}_tests test.cpp)
+add_executable(${PROJECT_NAME}_tests
+    test.cpp
+)
 
 # Link against the project library and googletest.
 # GTest::gtest_main provides a main() for the tests.
@@ -13,3 +15,13 @@ target_compile_options(${PROJECT_NAME}_tests PRIVATE ${PROJECT_WARNING_FLAGS})
 
 # Descobre e registra os testes automaticamente
 gtest_discover_tests(${PROJECT_NAME}_tests)
+
+# Testes isolados do parser header-only: não dependem da aplicação ou WebView.
+add_executable(option_parser_tests test_option_parser.cpp)
+target_link_libraries(option_parser_tests
+    PRIVATE
+    app::cli_parser
+    GTest::gtest_main
+)
+target_compile_options(option_parser_tests PRIVATE ${PROJECT_WARNING_FLAGS})
+gtest_discover_tests(option_parser_tests)

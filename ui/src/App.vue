@@ -74,27 +74,33 @@ async function applyBootstrap(api) {
 function seedLayout(api) {
     api.clear()
     api.addPanel({
-        id: 'welcome',
-        title: 'Workspace',
-        component: 'WelcomePanel'
+        id: 'viewport',
+        title: 'Viewport',
+        component: 'ViewportPanel'
     })
     api.addPanel({
-        id: 'console',
-        title: 'Console',
-        component: 'ConsolePanel',
-        position: { referencePanel: 'welcome', direction: 'within' }
+        id: 'welcome',
+        title: 'Workspace',
+        component: 'WelcomePanel',
+        position: { referencePanel: 'viewport', direction: 'left' }
     })
     api.addPanel({
         id: 'inspector',
         title: 'Inspector',
         component: 'InspectorPanel',
-        position: { referencePanel: 'welcome', direction: 'right' }
+        position: { referencePanel: 'viewport', direction: 'right' }
     })
     api.addPanel({
         id: 'timeline',
         title: 'Timeline',
         component: 'TimelinePanel',
-        position: { referencePanel: 'inspector', direction: 'below' }
+        position: { referencePanel: 'viewport', direction: 'below' }
+    })
+    api.addPanel({
+        id: 'console',
+        title: 'Console',
+        component: 'ConsolePanel',
+        position: { referencePanel: 'timeline', direction: 'within' }
     })
 }
 
