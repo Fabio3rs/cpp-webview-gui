@@ -9,6 +9,13 @@
 #include <cstddef>
 #include <string_view>
 
+#ifdef APP_USE_GENERATED_RESOURCES
+
+// NOLINTNEXTLINE
+#include "index_html_embedded.h"
+
+#else
+
 namespace embedded {
 
 // Declarações - definições estão no .cpp gerado pelo CMake
@@ -27,3 +34,5 @@ inline std::string_view index_html_view() {
 // Antes: INDEX_HTML (string literal)
 // Agora: INDEX_HTML (const char*)
 #define INDEX_HTML (::embedded::index_html_str())
+
+#endif // APP_USE_GENERATED_RESOURCES

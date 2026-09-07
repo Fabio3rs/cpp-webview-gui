@@ -354,6 +354,16 @@ target_include_directories(${PROJECT_NAME}_lib PUBLIC
     "${CMAKE_SOURCE_DIR}/include"
 )
 
+if(NOT DEV_MODE)
+    target_include_directories(${PROJECT_NAME}_lib PUBLIC
+        "${CMAKE_BINARY_DIR}/generated"
+    )
+    target_compile_definitions(${PROJECT_NAME}_lib PUBLIC
+        APP_USE_GENERATED_RESOURCES=1
+    )
+    add_dependencies(${PROJECT_NAME}_lib ui_build)
+endif()
+
 # Includes das dependências como SYSTEM (suprime warnings)
 get_target_property(WEBVIEW_INCLUDE_DIRS webview::core INTERFACE_INCLUDE_DIRECTORIES)
 get_target_property(JSON_INCLUDE_DIRS nlohmann_json::nlohmann_json INTERFACE_INCLUDE_DIRECTORIES)
