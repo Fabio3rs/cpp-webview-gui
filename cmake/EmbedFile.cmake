@@ -19,6 +19,11 @@ if(DEFINED INPUT_FILE AND DEFINED OUTPUT_FILE)
     if(NOT DEFINED SYMBOL)
         set(SYMBOL "embedded_data")
     endif()
+    string(TOUPPER "${SYMBOL}" SYMBOL_UPPER)
+
+    if(NOT DEFINED OUTPUT_HEADER)
+        message(FATAL_ERROR "OUTPUT_HEADER não foi definido")
+    endif()
 
     # Lê o arquivo em hexadecimal
     file(READ "${INPUT_FILE}" hex_data HEX)
@@ -62,6 +67,31 @@ const char* ${SYMBOL}_str() {
 }
 
 } // namespace embedded
+")
+
+    file(WRITE "${OUTPUT_HEADER}"
+"#pragma once
+#include <cstddef>
+#include <string_view>
+
+namespace embedded {
+
+// Declarações - definições estão no .cpp gerado pelo CMake
+extern const unsigned char ${SYMBOL}_data[];
+[[maybe_unused]] extern const std::size_t ${SYMBOL}_size;
+const char *${SYMBOL}_str();
+
+// Wrapper conveniente para C++17+
+inline std::string_view ${SYMBOL}_view() {
+    return {${SYMBOL}_str(), ${SYMBOL}_size};
+}
+
+} // namespace embedded
+
+// Alias para compatibilidade com código existente
+// Antes: ${SYMBOL} (string literal)
+// Agora: ${SYMBOL} (const char*)
+#define ${SYMBOL_UPPER} (::embedded::${SYMBOL}_str())
 ")
 
     message(STATUS "Embedded: ${INPUT_FILE} -> ${OUTPUT_FILE} (${file_size} bytes)")

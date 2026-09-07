@@ -278,6 +278,7 @@ set(UI_DIR "${CMAKE_SOURCE_DIR}/ui")
 set(UI_DIST_DIR "${UI_DIR}/dist")
 set(UI_DIST_HTML "${UI_DIST_DIR}/index.html")
 set(UI_EMBEDDED_CPP "${CMAKE_BINARY_DIR}/generated/index_html_embedded.cpp")
+set(UI_EMBEDDED_H "${CMAKE_BINARY_DIR}/generated/index_html_embedded.h")
 
 # ==============================================================================
 # Build do UI (apenas em modo produção)
@@ -314,10 +315,11 @@ if(NOT DEV_MODE)
     set(EMBED_SCRIPT "${CMAKE_SOURCE_DIR}/cmake/EmbedFile.cmake")
 
     add_custom_command(
-        OUTPUT "${UI_EMBEDDED_CPP}"
+        OUTPUT "${UI_EMBEDDED_CPP}" "${UI_EMBEDDED_H}"
         COMMAND ${CMAKE_COMMAND}
             -DINPUT_FILE=${UI_DIST_HTML}
             -DOUTPUT_FILE=${UI_EMBEDDED_CPP}
+            -DOUTPUT_HEADER=${UI_EMBEDDED_H}
             -DSYMBOL=index_html
             -P ${EMBED_SCRIPT}
         DEPENDS "${UI_DIST_HTML}" "${EMBED_SCRIPT}"
@@ -325,7 +327,7 @@ if(NOT DEV_MODE)
     )
 
     # Target que agrupa todo o build do UI
-    add_custom_target(ui_build DEPENDS "${UI_EMBEDDED_CPP}")
+    add_custom_target(ui_build DEPENDS "${UI_EMBEDDED_CPP}" "${UI_EMBEDDED_H}")
 endif()
 
 # ==============================================================================
