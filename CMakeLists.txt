@@ -366,6 +366,11 @@ if(APPLE)
     target_sources(${PROJECT_NAME}_lib PRIVATE
         src/app/navigation_guard_macos.mm
         src/app/binary_rpc_transport_macos.mm)
+    find_library(APP_FOUNDATION_FRAMEWORK Foundation REQUIRED)
+    find_library(APP_APPKIT_FRAMEWORK AppKit REQUIRED)
+    target_link_libraries(${PROJECT_NAME}_lib PUBLIC
+        ${APP_FOUNDATION_FRAMEWORK}
+        ${APP_APPKIT_FRAMEWORK})
 elseif(WIN32)
     target_sources(${PROJECT_NAME}_lib PRIVATE
         src/app/navigation_guard_win32.cpp
