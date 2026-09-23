@@ -37,6 +37,7 @@ if(UNIX AND NOT APPLE)
     if(XVFB_RUN_EXECUTABLE)
         add_executable(binary_rpc_webview_tests test_binary_rpc_webview.cpp)
         target_link_libraries(binary_rpc_webview_tests PRIVATE ${PROJECT_NAME}_lib GTest::gtest_main)
+        target_compile_definitions(binary_rpc_webview_tests PRIVATE APP_NO_EMBEDDED_UI=1)
         target_compile_options(binary_rpc_webview_tests PRIVATE ${PROJECT_WARNING_FLAGS})
         add_test(NAME binary_rpc_webview
             COMMAND ${XVFB_RUN_EXECUTABLE} -a $<TARGET_FILE:binary_rpc_webview_tests>)

@@ -2,9 +2,11 @@
 
 #include "app/binary_rpc.h"
 #include "app/bindings.h"
+#include "app/wire_codec.h"
 
 #include <cstdint>
 #include <string_view>
+#include <tuple>
 #include <utility>
 
 namespace app::binary_rpc {
@@ -19,6 +21,36 @@ namespace app::binary_rpc {
         hash *= prime;
     }
     return hash;
+}
+
+template <typename F, std::size_t... I>
+void bind_wire_impl(Dispatcher &dispatcher, std::string_view name, F func,
+                    std::index_sequence<I...>) {
+    using Traits = bindings::function_traits<F>;
+    using Result = typename Traits::result_type;
+    dispatcher.bind(method_id(name), [callable = std::move(func)](
+                                         Reader &reader, Writer &writer) {
+        // Braced initialization decodes arguments in wire order.
+        std::tuple<std::decay_t<typename Traits::template arg<I>>...> args{
+            WireCodec<std::decay_t<typename Traits::template arg<I>>>::read(
+                reader)...};
+        reader.finish();
+        if constexpr (std::is_void_v<Result>) {
+            std::apply(callable, args);
+        } else {
+            auto result = std::apply(callable, args);
+            WireCodec<std::decay_t<Result>>::write(writer, result);
+        }
+    });
+}
+
+// Register a statically typed handler without constructing a JSON DOM.
+template <typename F>
+void bind_wire(Dispatcher &dispatcher, std::string_view name, F func) {
+    using Callable = std::decay_t<F>;
+    using Traits = bindings::function_traits<Callable>;
+    bind_wire_impl(dispatcher, name, Callable(std::move(func)),
+                   std::make_index_sequence<Traits::arity>{});
 }
 
 template <typename F>

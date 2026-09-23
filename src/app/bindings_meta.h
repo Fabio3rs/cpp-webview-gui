@@ -40,7 +40,7 @@ template <typename T> struct TsType {
 };
 
 template <> struct TsType<void> {
-    static std::string name() { return "void"; }
+    static std::string name() { return "Record<string, never>"; }
 };
 template <> struct TsType<bool> {
     static std::string name() { return "boolean"; }
@@ -67,6 +67,12 @@ template <> struct TsType<json> {
 template <typename T> struct TsType<std::optional<T>> {
     static std::string name() {
         return TsType<std::decay_t<T>>::name() + " | null";
+    }
+};
+
+template <typename T> struct TsType<std::vector<T>> {
+    static std::string name() {
+        return "Array<" + TsType<std::decay_t<T>>::name() + ">";
     }
 };
 
@@ -100,11 +106,15 @@ inline void register_binding_meta(
     registry().push_back(std::move(meta));
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 inline void dump_typescript_and_index(std::ostream &dts,
                                       std::ostream &json_out) {
     const auto &regs = registry();
     dts << "export {};\n\n";
     dts << "declare global {\n";
+    dts << "  type NativeBindingResult<T> = "
+           "{ ok: true; data?: T } | "
+           "{ ok: false; error: { code: number; message: string } };\n";
     for (const auto &b : regs) {
         dts << "  function " << b.name << "(";
         for (std::size_t i = 0; i < b.args_ts.size(); ++i) {
@@ -112,7 +122,8 @@ inline void dump_typescript_and_index(std::ostream &dts,
             if (i + 1 < b.args_ts.size())
                 dts << ", ";
         }
-        dts << "): " << b.return_ts << ";\n";
+        dts << "): Promise<NativeBindingResult<" << b.return_ts
+            << ">>;\n";
     }
     dts << "}\n";
 

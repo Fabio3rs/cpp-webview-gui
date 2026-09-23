@@ -1,4 +1,5 @@
 #include "app/binary_rpc.h"
+#include "app/wire_codec.h"
 #include <gtest/gtest.h>
 
 #include <array>
@@ -73,4 +74,35 @@ TEST(BinaryDispatcher, RejectsUnknownAndExtraArguments) {
     EXPECT_THROW(static_cast<void>(dispatcher.call(7, extra)), rpc::WireError);
     EXPECT_THROW(static_cast<void>(dispatcher.call(8, {})), rpc::WireError);
     EXPECT_THROW(dispatcher.bind(7, [](auto &, auto &) {}), rpc::WireError);
+}
+
+TEST(BinaryWireCodec, ComposesOptionalVectorAndUtf8) {
+    rpc::Writer writer;
+    rpc::WireCodec<std::optional<std::string>>::write(writer, "olá");
+    rpc::WireCodec<std::vector<std::int32_t>>::write(writer, {1, -2, 3});
+    rpc::WireCodec<std::optional<std::string>>::write(writer, std::nullopt);
+    const auto encoded = std::move(writer).take();
+    rpc::Reader reader(encoded);
+    EXPECT_EQ(rpc::WireCodec<std::optional<std::string>>::read(reader), "olá");
+    EXPECT_EQ(rpc::WireCodec<std::vector<std::int32_t>>::read(reader),
+              (std::vector<std::int32_t>{1, -2, 3}));
+    EXPECT_EQ(rpc::WireCodec<std::optional<std::string>>::read(reader),
+              std::nullopt);
+    EXPECT_NO_THROW(reader.finish());
+}
+
+TEST(BinaryWireCodec, RejectsInvalidBooleanAndVectorLength) {
+    const std::array<std::uint8_t, 1> invalid_boolean{2};
+    rpc::Reader boolean_reader(invalid_boolean);
+    EXPECT_THROW(static_cast<void>(rpc::WireCodec<bool>::read(boolean_reader)),
+                 rpc::WireError);
+
+    rpc::Writer writer;
+    writer.u32(100);
+    const auto encoded = std::move(writer).take();
+    rpc::Reader vector_reader(encoded);
+    EXPECT_THROW(
+        static_cast<void>(rpc::WireCodec<std::vector<std::int32_t>>::read(
+            vector_reader)),
+        rpc::WireError);
 }

@@ -37,7 +37,12 @@ class Application {
         : options_(opts), dev_mode_(resolve_dev_mode(opts)),
           verbose_(opts.verbose) {}
 
-    ~Application() { cleanup(); }
+    ~Application() {
+        if (window_) {
+            binary_rpc::clear_transport(*window_);
+        }
+        cleanup();
+    }
 
     // Non-copyable, non-movable
     Application(const Application &) = delete;
@@ -136,16 +141,12 @@ class Application {
 
 #if defined(__linux__)
             binary_rpc::Dispatcher binary_rpc;
-            binary_rpc.bind(1, [](auto &, auto &out) { out.i32(42); });
-            binary_rpc.bind(2, [](auto &, auto &out) { out.f64(3.14159); });
-            binary_rpc.bind(3, [](auto &, auto &out) { out.u8(1); });
-            binary_rpc.bind(4, [](auto &, auto &out) {
-                out.string("online");
-            });
-            binary_rpc.bind(5, [](auto &in, auto &out) {
+            constexpr std::uint32_t echo_method_id = 5;
+            constexpr std::uint32_t add_method_id = 6;
+            binary_rpc.bind(echo_method_id, [](auto &in, auto &out) {
                 out.bytes(in.bytes());
             });
-            binary_rpc.bind(6, [](auto &in, auto &out) {
+            binary_rpc.bind(add_method_id, [](auto &in, auto &out) {
                 const auto left = in.i32();
                 const auto right = in.i32();
                 const auto sum = static_cast<std::int64_t>(left) + right;
@@ -159,7 +160,8 @@ class Application {
 
             // Setup window manager and bindings
             window_manager_ = std::make_unique<WindowManager>(
-                *window_, dev_mode_, dev_url_, options_.url, width, height,
+                *window_, dev_mode_, dev_url_, options_.url,
+                WindowManager::WindowSize{width, height},
                 config::WINDOW_TITLE);
             window_manager_->set_bindings_setup(
                 [this](webview::webview &w) { setup_bindings(w); });
@@ -169,6 +171,7 @@ class Application {
                 *window_, std::move(binary_rpc));
             if (binary_ready && !dev_mode_ && options_.url.empty()) {
                 window_->init("window.__APP_BINARY_RPC__ = true;");
+                window_manager_->set_binary_transport_enabled(true);
             }
 #else
             setup_bindings(*window_);
@@ -277,11 +280,11 @@ class Application {
             return;
         }
 
-        APP_BIND_TYPED_BINARY(w, binary, "createNativeWindow",
-                       [this](app::bindings::json bootstrap) {
+        APP_BIND_TYPED_WIRE(w, binary, "createNativeWindow",
+                       [this](WindowBootstrap bootstrap) {
                            return window_manager_->create_window(bootstrap);
                        });
-        APP_BIND_TYPED_BINARY(w, binary, "getBootstrap", [this](const std::string &window_id) {
+        APP_BIND_TYPED_WIRE(w, binary, "getBootstrap", [this](const std::string &window_id) {
             auto bootstrap = window_manager_->take_bootstrap(window_id);
             if (!bootstrap) {
                 throw app::bindings::BindingError(
@@ -290,16 +293,16 @@ class Application {
             }
             return *bootstrap;
         });
-        APP_BIND_TYPED_BINARY(
+        APP_BIND_TYPED_WIRE(
             w, binary, "postNativeEvent",
-            [this](const std::string &window_id, app::bindings::json event) {
-                if (!window_manager_->post_event(window_id, event)) {
+            [this](const std::string &window_id, OpaqueValue event) {
+                if (!window_manager_->post_opaque_event(window_id, event)) {
                     throw app::bindings::BindingError(
                         "Window not found",
                         app::bindings::ErrorCode::MissingArg);
                 }
             });
-        APP_BIND_TYPED_BINARY(w, binary, "closeNativeWindow",
+        APP_BIND_TYPED_WIRE(w, binary, "closeNativeWindow",
                        [this](const std::string &window_id) {
                            if (!window_manager_->close_window(window_id)) {
                                throw app::bindings::BindingError(
@@ -307,21 +310,21 @@ class Application {
                                    app::bindings::ErrorCode::MissingArg);
                            }
                        });
-        APP_BIND_TYPED_BINARY(w, binary, "listNativeWindows",
+        APP_BIND_TYPED_WIRE(w, binary, "listNativeWindows",
                        [this]() { return window_manager_->list_windows(); });
-        APP_BIND_TYPED_BINARY(
+        APP_BIND_TYPED_WIRE(
             w, binary, "startNativeDrag",
-            [this](const std::string &window_id, app::bindings::json payload) {
+            [this](const std::string &window_id, OpaqueValue payload) {
                 window_manager_->start_drag_tracking(window_id, payload);
             });
-        APP_BIND_TYPED_BINARY(w, binary, "completeNativeDrag",
+        APP_BIND_TYPED_WIRE(w, binary, "completeNativeDrag",
                        [this](const std::string &target_window_id) {
                            return window_manager_->complete_drag_tracking(
                                target_window_id);
                        });
-        APP_BIND_TYPED_BINARY(w, binary, "stopNativeDrag",
+        APP_BIND_TYPED_WIRE(w, binary, "stopNativeDrag",
                        [this]() { window_manager_->stop_drag_tracking(); });
-        APP_BIND_TYPED_BINARY(w, binary, "completeNativeDragOutside",
+        APP_BIND_TYPED_WIRE(w, binary, "completeNativeDragOutside",
                        [this](const std::string &window_id) {
                            return window_manager_->complete_drag_outside(
                                window_id);

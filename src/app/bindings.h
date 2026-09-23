@@ -14,6 +14,7 @@
 #include <tuple>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace app::bindings {
 
@@ -99,7 +100,7 @@ inline json to_json_value(const char *value) {
 inline json to_json_value(bool value) { return json(value); }
 
 // nlohmann::json - retorna diretamente
-inline const json &to_json_value(const json &value) { return value; }
+inline json to_json_value(const json &value) { return value; }
 
 // Permite especialização para tipos customizados pelo usuário
 // Exemplo:
@@ -113,7 +114,7 @@ inline const json &to_json_value(const json &value) { return value; }
 // bind_generic - permite qualquer retorno conversível para JSON
 // =============================================================================
 template <typename F>
-void bind_generic(webview::webview &w, std::string name, F &&func) {
+void bind_generic(webview::webview &w, std::string name, F &&func) { // NOLINT(cppcoreguidelines-missing-std-forward)
     using Callable = std::decay_t<F>;
     using ResultType = std::decay_t<decltype(std::declval<Callable>()())>;
 
@@ -216,7 +217,7 @@ template <typename T, typename Enable = void> struct JsConv {
 };
 
 template <> struct JsConv<json> {
-    static const json &from_json(const json &j) { return j; }
+    static json from_json(const json &j) { return j; }
     static json to_json(const json &value) { return value; }
 };
 
@@ -233,6 +234,28 @@ template <typename T> struct JsConv<std::optional<T>> {
             return nullptr;
         }
         return JsConv<T>::to_json(*value);
+    }
+};
+
+template <typename T> struct JsConv<std::vector<T>> {
+    static std::vector<T> from_json(const json &value) {
+        if (!value.is_array()) {
+            throw BindingError("Expected array", ErrorCode::TypeMismatch);
+        }
+        std::vector<T> result;
+        result.reserve(value.size());
+        for (const auto &element : value) {
+            result.push_back(JsConv<T>::from_json(element));
+        }
+        return result;
+    }
+
+    static json to_json(const std::vector<T> &values) {
+        json result = json::array();
+        for (const auto &value : values) {
+            result.push_back(JsConv<T>::to_json(value));
+        }
+        return result;
     }
 };
 
@@ -293,13 +316,14 @@ decltype(auto) call_with_json_args(Callable &&callable, const json &args) {
 }
 
 template <typename F>
-void bind_typed(webview::webview &w, std::string name, F &&func) {
+void bind_typed(webview::webview &w, std::string name, F &&func) { // NOLINT(cppcoreguidelines-missing-std-forward)
     using Callable = std::decay_t<F>;
     using traits = function_traits<Callable>;
     using result_t = typename traits::result_type;
 
     // Assert para invariants (NASA-style)
-    static_assert(traits::arity <= 32,
+    constexpr std::size_t max_binding_arity = 32;
+    static_assert(traits::arity <= max_binding_arity,
                   "Too many arguments for binding"); // Bounded arity
 
     bind_json(

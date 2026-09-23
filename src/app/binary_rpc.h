@@ -86,6 +86,10 @@ class Reader {
         return result;
     }
 
+    [[nodiscard]] std::size_t unread_size() const noexcept {
+        return bytes_.size() - offset_;
+    }
+
     void finish() const {
         if (offset_ != bytes_.size()) {
             throw WireError("Trailing bytes");

@@ -16,25 +16,36 @@ C++ desktop application using webview for cross-platform GUI, Vue 3 for the fron
 Production builds on Linux with WebKitGTK 2.40+ expose an in-process binary
 endpoint at `app-rpc://native/<method-id>`. The embedded page is loaded with
 that origin, then calls `fetch()` with a `Uint8Array` request body and reads an
-`ArrayBuffer` response. Method 1 (`getCounterBinary`) and method 5
-(`echoBytesBinary`) are available from `ui/src/binary_rpc.js`; the latter carries
-raw bytes without JSON or base64. All existing named bindings are also
-registered with stable numeric IDs and use CBOR over this endpoint in Linux
-production builds. This removes JSON text from those RPC calls while their
-handlers still use `nlohmann::json` values internally. The transport accepts
+`ArrayBuffer` response. All named application bindings use typed
+`WireCodec<T>` values end to end; their IDs are derived from their names.
+Window settings, results, and errors have fixed wire layouts. Variable
+Dockview state and arbitrary event payloads are carried as opaque CBOR bytes:
+the native RPC handlers store or forward them without constructing a JSON DOM.
+A separate `echoBytesBinary` example carries raw bytes without JSON or base64.
+The transport accepts
 at most 16 MiB per message. Direct typed calls use little-endian integers and
-a 32-bit byte length for strings and byte arrays.
+a 32-bit byte length for strings and byte arrays. The C++ and JS codecs also
+support optional values and vectors.
+
+The scheme is registered once per WebKit context. Embedded secondary windows
+sharing that context load with the binary origin and use the same dispatcher;
+windows on another context retain the legacy bridge. On Linux production pages,
+native events are queued as bytes and the page fetches each event after a small
+JavaScript notification containing only its numeric token.
 
 This is a Linux production path. Vite pages have a different origin and remain
 on the existing JSON bridge in development; macOS and Windows still use the
-existing bindings. Native window events sent through `WindowManager::post_event`
-still use JSON and `eval()`. The six direct typed method IDs in
-`Application::create_window` and `ui/src/binary_rpc.js` must be kept in sync
-until binding generation covers them; named binding IDs are derived from their
-names and checked for collisions at startup.
+existing JSON bindings. Native-generated control events are still assembled
+with `nlohmann::json` before being encoded as CBOR; a full event queue also has
+a textual fallback. The two standalone example method IDs for byte
+echo and integer addition remain manually assigned. The JS list of named
+bindings is still maintained separately from C++ metadata; its test detects
+drift. Named IDs are derived from binding names and checked for collisions at
+startup.
 
 `tests/test_binary_rpc_webview.cpp` exercises a real WebKitGTK page with a
-15 MiB request and response, plus a CBOR call. Run it with `ctest --test-dir build` on a machine
+15 MiB request and response, typed struct calls, a one-shot binary event, and a
+second WebView in the same context. Run it with `ctest --test-dir build` on a machine
 with Xvfb. The JS wire tests run with `cd ui && npm run test:binary`.
 For timing comparisons, build `bench_binary_rpc` with sanitizers disabled and
 run it under Xvfb. It reports small call latency and 1 MiB JSON/base64 versus

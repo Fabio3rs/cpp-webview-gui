@@ -1,4 +1,5 @@
 #include "app/binary_rpc_transport.h"
+#include "app/bindings.h"
 
 #if defined(__linux__)
 #include <gtk/gtk.h>
@@ -11,6 +12,7 @@
 #include <array>
 #include <charconv>
 #include <memory>
+#include <map>
 #include <string_view>
 
 namespace app::binary_rpc {
@@ -18,14 +20,26 @@ namespace app::binary_rpc {
 namespace {
 
 constexpr std::string_view prefix = "app-rpc://native/";
+constexpr std::string_view event_prefix = "app-rpc://native/event/";
 constexpr std::size_t chunk_size = 8192;
+constexpr std::size_t max_pending_events = 64;
+constexpr std::size_t max_pending_event_bytes = std::size_t{32} * 1024 * 1024;
+constexpr const char *context_state_key = "app-binary-rpc-transport";
+
+struct TransportState {
+    Dispatcher dispatcher;
+    std::map<std::uint64_t, Bytes> events;
+    std::size_t pending_event_bytes = 0;
+    std::uint64_t next_event_id = 1;
+};
 
 enum class HttpStatus : unsigned {
     ok = 200,
     bad_request = 400,
     not_found = 404,
     method_not_allowed = 405,
-    payload_too_large = 413
+    payload_too_large = 413,
+    server_error = 500
 };
 
 void finish(WebKitURISchemeRequest *request, Bytes body, HttpStatus status,
@@ -50,16 +64,40 @@ void finish(WebKitURISchemeRequest *request, Bytes body, HttpStatus status,
 }
 
 void on_request(WebKitURISchemeRequest *request, gpointer data) {
-    auto *dispatcher = static_cast<Dispatcher *>(data);
+    auto *state = static_cast<std::shared_ptr<TransportState> *>(data);
     const auto method =
         std::string_view(webkit_uri_scheme_request_get_http_method(request));
+    const auto uri =
+        std::string_view(webkit_uri_scheme_request_get_uri(request));
+    if (method == "GET" && uri.starts_with(event_prefix)) {
+        const auto text = uri.substr(event_prefix.size());
+        std::uint64_t token = 0;
+        const auto parsed =
+            std::from_chars(text.data(), text.data() + text.size(), token);
+        if (text.empty() || parsed.ec != std::errc{} ||
+            parsed.ptr != text.data() + text.size()) {
+            finish(request, {}, HttpStatus::not_found,
+                   "application/octet-stream");
+            return;
+        }
+        auto event = (*state)->events.find(token);
+        if (event == (*state)->events.end()) {
+            finish(request, {}, HttpStatus::not_found,
+                   "application/octet-stream");
+            return;
+        }
+        Bytes body = std::move(event->second);
+        (*state)->events.erase(event);
+        (*state)->pending_event_bytes -= body.size();
+        finish(request, std::move(body), HttpStatus::ok,
+               "application/octet-stream");
+        return;
+    }
     if (method != "POST") {
         finish(request, {}, HttpStatus::method_not_allowed,
                "application/octet-stream");
         return;
     }
-    const auto uri =
-        std::string_view(webkit_uri_scheme_request_get_uri(request));
     if (!uri.starts_with(prefix)) {
         finish(request, {}, HttpStatus::not_found, "application/octet-stream");
         return;
@@ -77,6 +115,18 @@ void on_request(WebKitURISchemeRequest *request, gpointer data) {
     Bytes body;
     auto *stream = webkit_uri_scheme_request_get_http_body(request);
     if (stream) {
+        auto *headers = webkit_uri_scheme_request_get_http_headers(request);
+        if (headers) {
+            const auto length = soup_message_headers_get_content_length(headers);
+            if (length > static_cast<goffset>(max_message_size)) {
+                finish(request, {}, HttpStatus::payload_too_large,
+                       "application/octet-stream");
+                return;
+            }
+            if (length > 0) {
+                body.reserve(static_cast<std::size_t>(length));
+            }
+        }
         std::array<std::uint8_t, chunk_size> chunk{};
         while (true) {
             GError *error = nullptr;
@@ -103,12 +153,23 @@ void on_request(WebKitURISchemeRequest *request, gpointer data) {
         }
     }
     try {
-        finish(request, dispatcher->call(id, body), HttpStatus::ok,
+        finish(request, (*state)->dispatcher.call(id, body), HttpStatus::ok,
                "application/octet-stream");
-    } catch (const std::exception &error) {
+    } catch (const bindings::BindingError &error) {
+        const auto message = std::string_view(error.what());
+        const auto status = error.code() == bindings::ErrorCode::InternalError
+                                ? HttpStatus::server_error
+                                : HttpStatus::bad_request;
+        finish(request, Bytes(message.begin(), message.end()), status,
+               "text/plain; charset=utf-8");
+    } catch (const WireError &error) {
         const auto message = std::string_view(error.what());
         finish(request, Bytes(message.begin(), message.end()),
                HttpStatus::bad_request, "text/plain; charset=utf-8");
+    } catch (const std::exception &error) {
+        const auto message = std::string_view(error.what());
+        finish(request, Bytes(message.begin(), message.end()),
+               HttpStatus::server_error, "text/plain; charset=utf-8");
     }
 }
 
@@ -119,15 +180,99 @@ bool install_transport(webview::webview &window, Dispatcher dispatcher) {
     handle.ensure_ok();
     auto *view = WEBKIT_WEB_VIEW(handle.value());
     auto *context = webkit_web_view_get_context(view);
+    auto *existing = static_cast<std::shared_ptr<TransportState> *>(
+        g_object_get_data(G_OBJECT(context), context_state_key));
+    if (existing) {
+        (*existing)->dispatcher = std::move(dispatcher);
+        return true;
+    }
+    auto state = std::make_shared<TransportState>();
+    state->dispatcher = std::move(dispatcher);
     auto *security = webkit_web_context_get_security_manager(context);
     webkit_security_manager_register_uri_scheme_as_secure(security, "app-rpc");
     webkit_web_context_register_uri_scheme(
         context, "app-rpc", on_request,
-        std::make_unique<Dispatcher>(std::move(dispatcher)).release(),
+        std::make_unique<std::shared_ptr<TransportState>>(state).release(),
         +[](gpointer data) {
-            std::unique_ptr<Dispatcher> owner(static_cast<Dispatcher *>(data));
+            std::unique_ptr<std::shared_ptr<TransportState>> owner(
+                static_cast<std::shared_ptr<TransportState> *>(data));
+        });
+    g_object_set_data_full(
+        G_OBJECT(context), context_state_key,
+        std::make_unique<std::shared_ptr<TransportState>>(std::move(state))
+            .release(),
+        +[](gpointer data) {
+            std::unique_ptr<std::shared_ptr<TransportState>> owner(
+                static_cast<std::shared_ptr<TransportState> *>(data));
         });
     return true;
+}
+
+void clear_transport(webview::webview &window) {
+    auto handle = window.browser_controller();
+    if (!handle.ok()) {
+        return;
+    }
+    auto *context =
+        webkit_web_view_get_context(WEBKIT_WEB_VIEW(handle.value()));
+    auto *state = static_cast<std::shared_ptr<TransportState> *>(
+        g_object_get_data(G_OBJECT(context), context_state_key));
+    if (state) {
+        (*state)->dispatcher = Dispatcher{};
+        (*state)->events.clear();
+        (*state)->pending_event_bytes = 0;
+    }
+}
+
+bool post_event_bytes(webview::webview &window, Bytes &event) {
+    if (event.size() > max_message_size) {
+        return false;
+    }
+    auto handle = window.browser_controller();
+    if (!handle.ok()) {
+        return false;
+    }
+    auto *context =
+        webkit_web_view_get_context(WEBKIT_WEB_VIEW(handle.value()));
+    auto *slot = static_cast<std::shared_ptr<TransportState> *>(
+        g_object_get_data(G_OBJECT(context), context_state_key));
+    if (!slot || (*slot)->events.size() >= max_pending_events ||
+        event.size() >
+            max_pending_event_bytes - (*slot)->pending_event_bytes) {
+        return false;
+    }
+    auto &state = **slot;
+    const auto token = state.next_event_id;
+    if (token == 0 || state.events.contains(token)) {
+        return false;
+    }
+    ++state.next_event_id;
+    state.pending_event_bytes += event.size();
+    state.events.emplace(token, std::move(event));
+    try {
+        window.eval("if(window.__APP_NATIVE_EVENT__)"
+                    "window.__APP_NATIVE_EVENT__(" +
+                    std::to_string(token) + ");");
+    } catch (const std::exception &) {
+        auto queued = state.events.find(token);
+        if (queued != state.events.end()) {
+            event = std::move(queued->second);
+            state.events.erase(queued);
+            state.pending_event_bytes -= event.size();
+        }
+        return false;
+    }
+    return true;
+}
+
+bool shares_transport_context(webview::webview &first,
+                              webview::webview &second) {
+    auto first_handle = first.browser_controller();
+    auto second_handle = second.browser_controller();
+    first_handle.ensure_ok();
+    second_handle.ensure_ok();
+    return webkit_web_view_get_context(WEBKIT_WEB_VIEW(first_handle.value())) ==
+           webkit_web_view_get_context(WEBKIT_WEB_VIEW(second_handle.value()));
 }
 
 void load_html_with_binary_origin(webview::webview &window,
@@ -139,6 +284,11 @@ void load_html_with_binary_origin(webview::webview &window,
 }
 #else
 bool install_transport(webview::webview &, Dispatcher) { return false; }
+void clear_transport(webview::webview &) {}
+bool shares_transport_context(webview::webview &, webview::webview &) {
+    return false;
+}
+bool post_event_bytes(webview::webview &, Bytes &) { return false; }
 void load_html_with_binary_origin(webview::webview &window,
                                   const std::string &html) {
     window.set_html(html);
@@ -148,6 +298,11 @@ void load_html_with_binary_origin(webview::webview &window,
 #else
 namespace app::binary_rpc {
 bool install_transport(webview::webview &, Dispatcher) { return false; }
+void clear_transport(webview::webview &) {}
+bool shares_transport_context(webview::webview &, webview::webview &) {
+    return false;
+}
+bool post_event_bytes(webview::webview &, Bytes &) { return false; }
 void load_html_with_binary_origin(webview::webview &window,
                                   const std::string &html) {
     window.set_html(html);
