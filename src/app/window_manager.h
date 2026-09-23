@@ -8,6 +8,8 @@
 #include "app/binding_policy.h"
 #include "app/bindings_with_meta.h"
 #include "app/native_types.h"
+#include "app/navigation_policy.h"
+#include "app/navigation_guard.h"
 #include "app/window_platform.h"
 #include "webview/webview.h"
 #include <atomic>
@@ -482,16 +484,32 @@ class WindowManager {
                                         child_handle.value());
             }
 
-            if (bindings_setup_ &&
-                should_install_bindings(
-                    dev_mode_, resolve_url(bootstrap_snapshot, window_id))) {
+            const auto content_url = resolve_url(bootstrap_snapshot, window_id);
+            bool trusted = false;
+            if (should_install_bindings(custom_url_)) {
+                if (dev_mode_) {
+                    const auto origin = parse_trusted_origin(dev_url_);
+                    trusted = origin &&
+                              is_trusted_navigation(content_url, *origin);
+                } else {
+                    trusted = content_url.empty();
+                }
+            }
+#if defined(__linux__)
+            if (trusted && !install_navigation_guard(
+                               *window, dev_mode_ ? std::string_view(dev_url_)
+                                                  : binary_rpc::rpc_base)) {
+                throw std::runtime_error("Failed to guard child navigation");
+            }
+#endif
+            if (bindings_setup_ && trusted) {
                 bindings_setup_(*window);
             }
             const bool binary_ready =
-                binary_transport_enabled_ &&
-                resolve_url(bootstrap_snapshot, window_id).empty() &&
+                trusted && binary_transport_enabled_ && content_url.empty() &&
                 binary_rpc::shares_transport_context(main_window_, *window);
             if (binary_ready) {
+                binary_rpc::authorize_view(*window);
                 bindings::remove_legacy_bindings(*window);
                 window->init("window.__APP_BINARY_RPC__ = { endpoint: '" +
                              std::string(binary_rpc::rpc_base) + "' };");

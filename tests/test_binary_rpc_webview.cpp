@@ -3,6 +3,7 @@
 #include "app/binary_rpc_bindings.h"
 #include "app/binary_rpc_transport.h"
 #include "app/handlers.h"
+#include "app/navigation_guard.h"
 #include "app/window_manager.h"
 #include <glib.h>
 
@@ -142,6 +143,8 @@ TEST(BinaryWebview, FetchTransfersTypedBytes) {
     if (!app::binary_rpc::install_transport(window, dispatcher)) {
         GTEST_SKIP() << "WebKitGTK before 2.40 has no binary POST body API";
     }
+    ASSERT_TRUE(app::install_navigation_guard(
+        window, "app-rpc://native/index.html"));
     app::bindings::remove_legacy_bindings(window);
 
     std::string result = "timeout";
@@ -288,6 +291,9 @@ TEST(BinaryWebview, SecondWindowSharesBinaryTransport) {
     }
     webview::webview child(false, nullptr);
     ASSERT_TRUE(app::binary_rpc::shares_transport_context(main, child));
+    app::binary_rpc::authorize_view(child);
+    ASSERT_TRUE(app::install_navigation_guard(
+        child, "app-rpc://native/index.html"));
 
     std::string result = "timeout";
     child.bind("reportChild", [&main, &result](const std::string &value) {
@@ -325,6 +331,8 @@ TEST(BinaryWebview, NativeEventUsesBinaryScheme) {
     if (!app::binary_rpc::install_transport(window, {})) {
         GTEST_SKIP() << "WebKitGTK before 2.40 has no binary scheme support";
     }
+    ASSERT_TRUE(app::install_navigation_guard(
+        window, "app-rpc://native/index.html"));
     std::string result = "timeout";
     window.bind("ready", [&window, &result](const std::string &) {
         app::binary_rpc::Bytes event{0x82, 0x01, 0x02};
@@ -367,6 +375,73 @@ TEST(BinaryWebview, NativeEventUsesBinaryScheme) {
     }
     EXPECT_EQ(result, R"(["ok"])");
     app::binary_rpc::clear_transport(window);
+}
+
+TEST(NavigationGuard, BlocksForeignTopLevelNavigation) {
+    webview::webview window(false, nullptr);
+    ASSERT_TRUE(app::install_navigation_guard(
+        window, "app-rpc://native/index.html"));
+    std::string result = "timeout";
+    window.bind("reportNavigation", [&window, &result](const std::string &value) {
+        result = value;
+        window.terminate();
+        return std::string("null");
+    });
+    const auto timeout = g_timeout_add_seconds(
+        5,
+        +[](gpointer data) -> gboolean {
+            static_cast<webview::webview *>(data)->terminate();
+            return G_SOURCE_REMOVE;
+        },
+        &window);
+    app::binary_rpc::load_html_with_binary_origin(
+        window,
+        "<!doctype html><title>trusted</title><script>"
+        "location.href='https://example.invalid/foreign';"
+        "setTimeout(()=>reportNavigation(document.title),250);"
+        "</script>");
+    window.run();
+    if (result != "timeout") {
+        g_source_remove(timeout);
+    }
+    EXPECT_EQ(result, R"(["trusted"])");
+}
+
+TEST(BinaryWebview, RejectsRequestFromUnprivilegedView) {
+    webview::webview main(false, nullptr);
+    app::binary_rpc::Dispatcher dispatcher;
+    dispatcher.bind(7, [](auto &, auto &out) { out.i32(42); });
+    if (!app::binary_rpc::install_transport(main, std::move(dispatcher))) {
+        GTEST_SKIP() << "WebKitGTK before 2.40 has no binary scheme support";
+    }
+    webview::webview untrusted(false, nullptr);
+    ASSERT_TRUE(app::binary_rpc::shares_transport_context(main, untrusted));
+    std::string result = "timeout";
+    untrusted.bind("reportDenied", [&main, &result](const std::string &value) {
+        result = value;
+        main.terminate();
+        return std::string("null");
+    });
+    const auto timeout = g_timeout_add_seconds(
+        5,
+        +[](gpointer data) -> gboolean {
+            static_cast<webview::webview *>(data)->terminate();
+            return G_SOURCE_REMOVE;
+        },
+        &main);
+    app::binary_rpc::load_html_with_binary_origin(
+        untrusted,
+        "<!doctype html><script>"
+        "fetch('app-rpc://native/7',{method:'POST',body:new Uint8Array()})"
+        ".then(r=>reportDenied(String(r.status)))"
+        ".catch(e=>reportDenied(String(e)));"
+        "</script>");
+    main.run();
+    if (result != "timeout") {
+        g_source_remove(timeout);
+    }
+    EXPECT_EQ(result, R"(["404"])");
+    app::binary_rpc::clear_transport(main);
 }
 
 TEST(BinaryWindowManager, CreatesChildWithTypedBootstrap) {
@@ -453,6 +528,49 @@ TEST(BinaryWindowManager, ExternalProductionChildHasNoNativeBindings) {
         &main);
     main.run();
     const auto created = manager.list_windows().size() > 1;
+    if (created) {
+        g_source_remove(timeout);
+    } else {
+        g_source_remove(poll);
+    }
+    ASSERT_TRUE(created);
+    EXPECT_FALSE(installed);
+}
+
+TEST(BinaryWindowManager, ExternalDevelopmentChildHasNoNativeBindings) {
+    webview::webview main(false, nullptr);
+    app::WindowManager manager(main, true, "http://127.0.0.1:5173", "",
+                               {640, 480}, "Main");
+    bool installed = false;
+    manager.set_bindings_setup(
+        [&installed](webview::webview &) { installed = true; });
+    app::WindowBootstrap bootstrap;
+    bootstrap.url = "about:blank";
+    manager.create_window(std::move(bootstrap));
+    struct WaitState {
+        app::WindowManager &manager;
+        webview::webview &main;
+    } state{manager, main};
+    const auto poll = g_timeout_add(
+        20,
+        +[](gpointer data) -> gboolean {
+            auto &wait = *static_cast<WaitState *>(data);
+            if (wait.manager.list_windows().size() > 1) {
+                wait.main.terminate();
+                return G_SOURCE_REMOVE;
+            }
+            return G_SOURCE_CONTINUE;
+        },
+        &state);
+    const auto timeout = g_timeout_add_seconds(
+        5,
+        +[](gpointer data) -> gboolean {
+            static_cast<webview::webview *>(data)->terminate();
+            return G_SOURCE_REMOVE;
+        },
+        &main);
+    main.run();
+    const bool created = manager.list_windows().size() > 1;
     if (created) {
         g_source_remove(timeout);
     } else {

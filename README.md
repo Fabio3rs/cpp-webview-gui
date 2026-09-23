@@ -48,10 +48,17 @@ echo and integer addition remain manually assigned. The JS list of named
 bindings is still maintained separately from C++ metadata; its test detects
 drift. Named IDs are derived from binding names and checked for collisions at
 startup.
-Production pages loaded from a caller-supplied URL do not receive native
-bindings. The same initial-load rule applies to auxiliary windows. Navigation
-away from an embedded privileged page still needs backend-specific enforcement
-before this is a complete origin policy.
+Pages loaded from a caller-supplied `--url` do not receive native bindings,
+including in development. A development window is privileged only when it
+loads the configured Vite origin. Auxiliary windows receive bindings only when
+their initial URL has the trusted origin, or when they load the embedded page.
+On Linux, privileged WebViews block navigation to other origins before the new
+document loads. New window actions outside the application's native window
+API are blocked. The context-wide binary endpoint also checks that its request
+comes from an authorized WebView and rejects an explicitly foreign `Origin`.
+User-clicked external HTTP(S) links open in the system browser; script-initiated
+navigation and other schemes stay blocked. Windows and macOS still need matching
+navigation guards when their binary transports are added.
 
 `tests/test_binary_rpc_webview.cpp` exercises a real WebKitGTK page with a
 15 MiB request and response, typed struct calls, a one-shot binary event, and a

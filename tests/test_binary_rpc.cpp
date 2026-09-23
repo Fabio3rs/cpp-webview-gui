@@ -1,5 +1,6 @@
 #include "app/binary_rpc.h"
 #include "app/binding_policy.h"
+#include "app/navigation_policy.h"
 #include "app/wire_codec.h"
 #include <gtest/gtest.h>
 
@@ -11,11 +12,70 @@
 namespace rpc = app::binary_rpc;
 
 TEST(BindingPolicy, ExternalProductionUrlHasNoNativeBindings) {
-    EXPECT_TRUE(app::should_install_bindings(false, ""));
-    EXPECT_FALSE(app::should_install_bindings(false,
-                                              "https://example.invalid/page"));
-    EXPECT_TRUE(app::should_install_bindings(true,
-                                             "http://localhost:5173"));
+    EXPECT_TRUE(app::should_install_bindings(""));
+    EXPECT_FALSE(app::should_install_bindings("https://example.invalid/page"));
+    EXPECT_FALSE(app::should_install_bindings("http://localhost:5173"));
+}
+
+TEST(NavigationPolicy, AcceptsOnlyTheConfiguredOrigin) {
+    const auto trusted =
+        app::parse_trusted_origin("http://127.0.0.1:5173/index.html");
+    ASSERT_TRUE(trusted.has_value());
+    EXPECT_TRUE(app::is_trusted_navigation(
+        "HTTP://127.0.0.1:5173/page?wid=w1", *trusted));
+    EXPECT_FALSE(app::is_trusted_navigation(
+        "http://127.0.0.1:5174/page", *trusted));
+    EXPECT_FALSE(app::is_trusted_navigation(
+        "http://127.0.0.1:5173.evil.invalid/page", *trusted));
+    EXPECT_FALSE(app::is_trusted_navigation(
+        "http://127.0.0.1:5173@evil.invalid/page", *trusted));
+    EXPECT_FALSE(app::is_trusted_navigation(
+        "http://127.0.0.1:5173\\@evil.invalid/page", *trusted));
+    EXPECT_FALSE(app::is_trusted_navigation("about:blank", *trusted));
+    EXPECT_FALSE(app::is_trusted_navigation("data:text/html,hello", *trusted));
+}
+
+TEST(NavigationPolicy, NormalizesDefaultPortsAndCustomScheme) {
+    const auto https = app::parse_trusted_origin("https://example.invalid/");
+    ASSERT_TRUE(https.has_value());
+    EXPECT_TRUE(app::is_trusted_navigation(
+        "https://EXAMPLE.invalid:443/next", *https));
+    EXPECT_FALSE(app::is_trusted_navigation(
+        "http://example.invalid/next", *https));
+
+    const auto scheme =
+        app::parse_trusted_origin("app-rpc://native/index.html");
+    ASSERT_TRUE(scheme.has_value());
+    EXPECT_TRUE(app::is_trusted_navigation("app-rpc://native/next", *scheme));
+    EXPECT_FALSE(app::is_trusted_navigation(
+        "app-rpc://native.evil.invalid/next", *scheme));
+}
+
+TEST(NavigationPolicy, OpensOnlyUserClickedExternalWebLinks) {
+    const auto trusted = app::parse_trusted_origin("app-rpc://native/");
+    ASSERT_TRUE(trusted.has_value());
+    using Decision = app::NavigationDecision;
+    EXPECT_EQ(app::decide_navigation("app-rpc://native/page", *trusted,
+                                     false, false, false),
+              Decision::allow);
+    EXPECT_EQ(app::decide_navigation("https://example.invalid/", *trusted,
+                                     false, true, true),
+              Decision::open_external);
+    EXPECT_EQ(app::decide_navigation("https://example.invalid/", *trusted,
+                                     true, true, true),
+              Decision::open_external);
+    EXPECT_EQ(app::decide_navigation("https://example.invalid/", *trusted,
+                                     false, false, true),
+              Decision::deny);
+    EXPECT_EQ(app::decide_navigation("https://example.invalid/", *trusted,
+                                     false, true, false),
+              Decision::deny);
+    EXPECT_EQ(app::decide_navigation("file:///tmp/file", *trusted, false,
+                                     true, true),
+              Decision::deny);
+    EXPECT_EQ(app::decide_navigation("app-rpc://native/page", *trusted,
+                                     true, true, true),
+              Decision::deny);
 }
 
 TEST(BinaryWire, RoundTripsPrimitiveValues) {

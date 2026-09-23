@@ -17,6 +17,8 @@ void clear_transport(webview::webview &window);
 // A registered scheme is shared only by views in the same WebKit context.
 [[nodiscard]] bool shares_transport_context(webview::webview &first,
                                             webview::webview &second);
+// Grants a guarded application WebView access to the context-wide scheme.
+void authorize_view(webview::webview &window);
 // Queues bytes for one application page and signals it with a small JS token.
 [[nodiscard]] bool post_event_bytes(webview::webview &window, Bytes &event);
 void load_html_with_binary_origin(webview::webview &window,

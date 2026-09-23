@@ -8,6 +8,8 @@
 #include "app/binding_policy.h"
 #include "app/config.h"
 #include "app/handlers.h"
+#include "app/navigation_policy.h"
+#include "app/navigation_guard.h"
 #include "app/shutdown_monitor.h"
 #include "app/window_manager.h"
 #include "dev_server.h"
@@ -167,9 +169,17 @@ class Application {
             window_manager_->set_bindings_setup(
                 [this](webview::webview &w) { setup_bindings(w); });
 #if defined(__linux__)
+            if (should_install_bindings(options_.url) &&
+                !install_navigation_guard(
+                    *window_, dev_mode_ ? std::string_view(dev_url_)
+                                        : binary_rpc::rpc_base)) {
+                throw std::runtime_error("Failed to guard privileged navigation");
+            }
+#endif
+#if defined(__linux__)
             if (dev_mode_) {
                 setup_bindings(*window_);
-            } else if (should_install_bindings(dev_mode_, options_.url)) {
+            } else if (should_install_bindings(options_.url)) {
                 setup_bindings(*window_, &binary_rpc);
                 const bool binary_ready = binary_rpc::install_transport(
                     *window_, std::move(binary_rpc));
@@ -181,13 +191,17 @@ class Application {
                 }
             }
 #else
-            if (should_install_bindings(dev_mode_, options_.url)) {
+            if (should_install_bindings(options_.url)) {
                 setup_bindings(*window_);
             }
 #endif
 
             return true;
         } catch (const webview::exception &e) {
+            std::cerr << "[APP] Erro ao criar janela: " << e.what()
+                      << std::endl;
+            return false;
+        } catch (const std::exception &e) {
             std::cerr << "[APP] Erro ao criar janela: " << e.what()
                       << std::endl;
             return false;

@@ -24,6 +24,7 @@ constexpr std::size_t chunk_size = 8192;
 constexpr std::size_t max_pending_events = 64;
 constexpr std::size_t max_pending_event_bytes = std::size_t{32} * 1024 * 1024;
 constexpr const char *context_state_key = "app-binary-rpc-transport";
+constexpr const char *authorized_view_key = "app-binary-rpc-authorized";
 
 struct TransportState {
     Dispatcher dispatcher;
@@ -64,6 +65,21 @@ void finish(WebKitURISchemeRequest *request, Bytes body, HttpStatus status,
 
 void on_request(WebKitURISchemeRequest *request, gpointer data) {
     auto *state = static_cast<std::shared_ptr<TransportState> *>(data);
+    auto *view = webkit_uri_scheme_request_get_web_view(request);
+    if (!view || !g_object_get_data(G_OBJECT(view), authorized_view_key)) {
+        finish(request, {}, HttpStatus::not_found,
+               "application/octet-stream");
+        return;
+    }
+    auto *headers = webkit_uri_scheme_request_get_http_headers(request);
+    const char *origin = headers ? soup_message_headers_get_one(headers, "Origin")
+                                 : nullptr;
+    if (origin && std::string_view(origin) != "app-rpc://native" &&
+        std::string_view(origin) != "null") {
+        finish(request, {}, HttpStatus::not_found,
+               "application/octet-stream");
+        return;
+    }
     const auto method =
         std::string_view(webkit_uri_scheme_request_get_http_method(request));
     const auto uri =
@@ -114,7 +130,6 @@ void on_request(WebKitURISchemeRequest *request, gpointer data) {
     Bytes body;
     auto *stream = webkit_uri_scheme_request_get_http_body(request);
     if (stream) {
-        auto *headers = webkit_uri_scheme_request_get_http_headers(request);
         if (headers) {
             const auto length = soup_message_headers_get_content_length(headers);
             if (length > static_cast<goffset>(max_message_size)) {
@@ -182,6 +197,7 @@ bool install_transport(webview::webview &window, Dispatcher dispatcher) {
     auto handle = window.browser_controller();
     handle.ensure_ok();
     auto *view = WEBKIT_WEB_VIEW(handle.value());
+    g_object_set_data(G_OBJECT(view), authorized_view_key, GINT_TO_POINTER(1));
     auto *context = webkit_web_view_get_context(view);
     auto *existing = static_cast<std::shared_ptr<TransportState> *>(
         g_object_get_data(G_OBJECT(context), context_state_key));
@@ -209,6 +225,13 @@ bool install_transport(webview::webview &window, Dispatcher dispatcher) {
                 static_cast<std::shared_ptr<TransportState> *>(data));
         });
     return true;
+}
+
+void authorize_view(webview::webview &window) {
+    auto handle = window.browser_controller();
+    handle.ensure_ok();
+    g_object_set_data(G_OBJECT(handle.value()), authorized_view_key,
+                      GINT_TO_POINTER(1));
 }
 
 void clear_transport(webview::webview &window) {
@@ -291,6 +314,7 @@ void clear_transport(webview::webview &) {}
 bool shares_transport_context(webview::webview &, webview::webview &) {
     return false;
 }
+void authorize_view(webview::webview &) {}
 bool post_event_bytes(webview::webview &, Bytes &) { return false; }
 void load_html_with_binary_origin(webview::webview &window,
                                   const std::string &html) {
@@ -305,6 +329,7 @@ void clear_transport(webview::webview &) {}
 bool shares_transport_context(webview::webview &, webview::webview &) {
     return false;
 }
+void authorize_view(webview::webview &) {}
 bool post_event_bytes(webview::webview &, Bytes &) { return false; }
 void load_html_with_binary_origin(webview::webview &window,
                                   const std::string &html) {
