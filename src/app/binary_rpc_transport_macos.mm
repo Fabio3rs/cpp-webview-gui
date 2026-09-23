@@ -215,8 +215,10 @@ void process(id<WKURLSchemeTask> task, TransportState &state) {
                 return;
             }
             auto state = app::binary_rpc::active_state;
-            if (!state || objc_getAssociatedObject(view,
-                    &app::binary_rpc::authorized_view_key) != state.get()) {
+            NSValue *authorized = (NSValue *)objc_getAssociatedObject(
+                view, &app::binary_rpc::authorized_view_key);
+            if (!state || !authorized ||
+                authorized.pointerValue != static_cast<void *>(state.get())) {
                 app::binary_rpc::reply(task, {}, 404,
                                        @"application/octet-stream");
                 return;
@@ -257,8 +259,9 @@ bool install_transport(webview::webview &window, Dispatcher dispatcher) {
     }
     auto state = std::make_shared<TransportState>();
     state->dispatcher = std::move(dispatcher);
-    objc_setAssociatedObject(view, &authorized_view_key, state.get(),
-                             OBJC_ASSOCIATION_ASSIGN);
+    objc_setAssociatedObject(
+        view, &authorized_view_key, [NSValue valueWithPointer:state.get()],
+        OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     active_state = std::move(state);
     return true;
 }
@@ -282,8 +285,10 @@ void authorize_view(webview::webview &window) {
     if (!view || !active_state) {
         throw std::runtime_error("Failed to authorize binary RPC WebView");
     }
-    objc_setAssociatedObject(view, &authorized_view_key, active_state.get(),
-                             OBJC_ASSOCIATION_ASSIGN);
+    objc_setAssociatedObject(
+        view, &authorized_view_key,
+        [NSValue valueWithPointer:active_state.get()],
+        OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
 bool post_event_bytes(webview::webview &window, Bytes &event) {
