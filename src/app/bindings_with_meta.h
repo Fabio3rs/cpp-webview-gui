@@ -4,6 +4,8 @@
 #include "app/bindings_meta.h"
 #include "app/binary_rpc_bindings.h"
 
+#include <unordered_set>
+
 namespace app::bindings {
 
 template <typename F>
@@ -30,6 +32,17 @@ void bind_typed_with_wire_meta(
     bind_typed_with_meta(w, name, callable, begin, end);
     if (binary) {
         binary_rpc::bind_wire(*binary, name, callable);
+    }
+}
+
+// The binary page installs generated JS functions after the WebView glue runs.
+// Remove its unused JSON handlers so later navigations cannot invoke them.
+inline void remove_legacy_bindings(webview::webview &window) {
+    std::unordered_set<std::string> names;
+    for (const auto &binding : meta::registry()) {
+        if (names.insert(binding.name).second) {
+            window.unbind(binding.name).ensure_ok();
+        }
     }
 }
 

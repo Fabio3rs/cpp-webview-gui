@@ -3,7 +3,11 @@
 #include "app/binary_rpc.h"
 #include "webview/webview.h"
 
+#include <string_view>
+
 namespace app::binary_rpc {
+
+inline constexpr std::string_view rpc_base = "app-rpc://native/";
 
 // Registers the in-process byte transport before the first page loads.
 [[nodiscard]] bool install_transport(webview::webview &window,

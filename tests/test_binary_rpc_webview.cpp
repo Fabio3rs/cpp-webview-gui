@@ -142,6 +142,7 @@ TEST(BinaryWebview, FetchTransfersTypedBytes) {
     if (!app::binary_rpc::install_transport(window, dispatcher)) {
         GTEST_SKIP() << "WebKitGTK before 2.40 has no binary POST body API";
     }
+    app::bindings::remove_legacy_bindings(window);
 
     std::string result = "timeout";
     window.bind("report", [&window, &result](const std::string &value) {
@@ -159,6 +160,7 @@ TEST(BinaryWebview, FetchTransfersTypedBytes) {
         &window);
 
     const char *html = R"html(<!doctype html><script>
+      const legacyExposed = typeof window.ping !== 'undefined';
       const payload = new Uint8Array(8);
       const input = new DataView(payload.buffer);
       input.setInt32(0, 20, true);
@@ -170,7 +172,8 @@ TEST(BinaryWebview, FetchTransfersTypedBytes) {
       }).then(async response => {
         if (!response.ok) throw new Error('HTTP ' + response.status);
         const result = new DataView(await response.arrayBuffer());
-        if (result.getInt32(0, true) !== 42) throw new Error('wrong integer');
+        if (result.getUint8(0) !== 0 || result.getInt32(1, true) !== 42)
+          throw new Error('wrong integer');
         const count = 15 * 1024 * 1024 - 4;
         const large = new Uint8Array(count + 4);
         new DataView(large.buffer).setUint32(0, count, true);
@@ -182,9 +185,10 @@ TEST(BinaryWebview, FetchTransfersTypedBytes) {
         });
         if (!echo.ok) throw new Error('echo HTTP ' + echo.status);
         const echoed = new Uint8Array(await echo.arrayBuffer());
-        const size = new DataView(echoed.buffer).getUint32(0, true);
-        if (size !== count || echoed.length !== large.length ||
-            !echoed.subarray(4).every(byte => byte === 0xab)) {
+        const size = new DataView(echoed.buffer).getUint32(1, true);
+        if (echoed[0] !== 0 || size !== count ||
+            echoed.length !== large.length + 1 ||
+            !echoed.subarray(5).every(byte => byte === 0xab)) {
           throw new Error('wrong payload');
         }
         let hash = 2166136261;
@@ -197,7 +201,7 @@ TEST(BinaryWebview, FetchTransfersTypedBytes) {
           headers: {'Content-Type': 'application/octet-stream'}
         });
         if (!cbor.ok) throw new Error('CBOR HTTP ' + cbor.status);
-        const actual = new Uint8Array(await cbor.arrayBuffer());
+        const actual = new Uint8Array(await cbor.arrayBuffer()).subarray(1);
         const expected = Uint8Array.of(
           0xa2, 0x64, 0x64, 0x61, 0x74, 0x61, 0x18, 0x2a,
           0x62, 0x6f, 0x6b, 0xf5);
@@ -229,24 +233,40 @@ TEST(BinaryWebview, FetchTransfersTypedBytes) {
           headers: {'Content-Type': 'application/octet-stream'}
         });
         const pingBytes = await ping.arrayBuffer();
-        const first = readString(pingBytes, 0);
+        const first = readString(pingBytes, 1);
         const second = readString(pingBytes, first.next);
         const config = await fetch(`app-rpc://native/${hashName('getConfig')}`,
           {method: 'POST', body: new Uint8Array()});
         const configBytes = await config.arrayBuffer();
-        const theme = readString(configBytes, 0);
+        const theme = readString(configBytes, 1);
         const lang = readString(configBytes, theme.next);
         const version = await fetch(`app-rpc://native/${hashName('getVersion')}`,
           {method: 'POST', body: new Uint8Array()});
-        const versionText = readString(await version.arrayBuffer(), 0).value;
+        const versionText = readString(await version.arrayBuffer(), 1).value;
         const emptyPath = new Uint8Array(4);
         const invalidFile = await fetch(`app-rpc://native/${hashName('openFile')}`,
           {method: 'POST', body: emptyPath});
-        const errorText = await invalidFile.text();
-        report(ping.ok && first.value === 'pong' && second.value === 'hi' &&
+        const errorBytes = await invalidFile.arrayBuffer();
+        const errorCode = new DataView(errorBytes).getUint32(1, true);
+        const errorText = readString(errorBytes, 5).value;
+        const unknown = await fetch('app-rpc://native/4294967295',
+          {method: 'POST', body: new Uint8Array()});
+        const unknownBytes = await unknown.arrayBuffer();
+        const unknownView = new DataView(unknownBytes);
+        const extra = await fetch('app-rpc://native/7',
+          {method: 'POST', body: Uint8Array.of(20, 0, 0, 0, 22, 0, 0, 0, 9)});
+        const extraBytes = await extra.arrayBuffer();
+        const extraView = new DataView(extraBytes);
+        report(!legacyExposed && ping.ok &&
+          first.value === 'pong' && second.value === 'hi' &&
           config.ok && theme.value === 'dark' && lang.value === 'pt-br' &&
           version.ok && versionText.length > 0 &&
-          invalidFile.status === 400 && errorText.includes('Path not provided')
+          invalidFile.ok && new DataView(errorBytes).getUint8(0) === 1 &&
+          errorCode === 400 && errorText.includes('Path not provided') &&
+          unknown.ok && unknownView.getUint8(0) === 1 &&
+          unknownView.getUint32(1, true) === 400 &&
+          extra.ok && extraView.getUint8(0) === 1 &&
+          extraView.getUint32(1, true) === 400
           ? 'ok' : 'wrong typed binding');
       }).catch(error => report(String(error)));
     </script>)html";
@@ -288,7 +308,8 @@ TEST(BinaryWebview, SecondWindowSharesBinaryTransport) {
         "',{method:'POST',body:new Uint8Array()})"
         ".then(async r=>{if(!r.ok)throw Error(r.status);"
         "const b=await r.arrayBuffer();reportChild("
-        "new DataView(b).getInt32(0,true)===42?'ok':'bad value')})"
+        "new DataView(b).getUint8(0)===0&&"
+        "new DataView(b).getInt32(1,true)===42?'ok':'bad value')})"
         ".catch(e=>reportChild(String(e)));</script>";
     app::binary_rpc::load_html_with_binary_origin(child, html);
     main.run();
@@ -397,4 +418,46 @@ TEST(BinaryWindowManager, CreatesChildWithTypedBootstrap) {
     EXPECT_EQ(app::bindings::JsConv<app::OpaqueValue>::to_json(stored->extras),
               (app::bindings::json{{"kind", "dockview"},
                                    {"panel", {{"component", "InspectorPanel"}}}}));
+}
+
+TEST(BinaryWindowManager, ExternalProductionChildHasNoNativeBindings) {
+    webview::webview main(false, nullptr);
+    app::WindowManager manager(main, false, "", "about:blank", {640, 480},
+                               "Main");
+    bool installed = false;
+    manager.set_bindings_setup(
+        [&installed](webview::webview &) { installed = true; });
+    manager.create_window({});
+
+    struct WaitState {
+        app::WindowManager &manager;
+        webview::webview &main;
+    } state{manager, main};
+    const auto poll = g_timeout_add(
+        20,
+        +[](gpointer data) -> gboolean {
+            auto &wait = *static_cast<WaitState *>(data);
+            if (wait.manager.list_windows().size() > 1) {
+                wait.main.terminate();
+                return G_SOURCE_REMOVE;
+            }
+            return G_SOURCE_CONTINUE;
+        },
+        &state);
+    const auto timeout = g_timeout_add_seconds(
+        5,
+        +[](gpointer data) -> gboolean {
+            static_cast<webview::webview *>(data)->terminate();
+            return G_SOURCE_REMOVE;
+        },
+        &main);
+    main.run();
+    const auto created = manager.list_windows().size() > 1;
+    if (created) {
+        g_source_remove(timeout);
+    } else {
+        g_source_remove(poll);
+    }
+    ASSERT_TRUE(created);
+    EXPECT_FALSE(installed);
 }

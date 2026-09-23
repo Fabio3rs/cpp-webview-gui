@@ -4,7 +4,6 @@ import {
     writeBootstrap, writeOpaque
 } from './native_wire_types.js'
 
-const endpoint = 'app-rpc://native/'
 const textEncoder = new TextEncoder()
 const textDecoder = new TextDecoder()
 const maxMessageSize = 16 * 1024 * 1024
@@ -174,10 +173,16 @@ export class WireReader {
     }
 }
 
-async function requestBinary(id, request) {
-    if (!window.__APP_BINARY_RPC__) {
+function rpcEndpoint() {
+    const endpoint = window.__APP_BINARY_RPC__?.endpoint
+    if (typeof endpoint !== 'string' || !endpoint.endsWith('/')) {
         throw new Error('Binary RPC is unavailable on this backend')
     }
+    return endpoint
+}
+
+async function requestBinary(id, request) {
+    const endpoint = rpcEndpoint()
     const response = await fetch(`${endpoint}${id}`, {
         method: 'POST',
         body: request,
@@ -188,7 +193,18 @@ async function requestBinary(id, request) {
         error.status = response.status
         throw error
     }
-    return new Uint8Array(await response.arrayBuffer())
+    const envelope = new WireReader(new Uint8Array(await response.arrayBuffer()))
+    const status = envelope.u8()
+    if (status === 0) {
+        return envelope.bytesView.subarray(envelope.offset)
+    }
+    if (status !== 1) throw new Error('Invalid binary response status')
+    const code = envelope.u32()
+    const message = envelope.string()
+    envelope.finish()
+    const error = new Error(message)
+    error.code = code
+    throw error
 }
 
 export async function callBinary(id, request = new Uint8Array()) {
@@ -213,7 +229,7 @@ export function installBinaryEventReceiver() {
     let pending = Promise.resolve()
     window.__APP_NATIVE_EVENT__ = token => {
         pending = pending.then(async () => {
-            const response = await fetch(`${endpoint}event/${token}`, {
+            const response = await fetch(`${rpcEndpoint()}event/${token}`, {
                 method: 'GET', cache: 'no-store'
             })
             if (!response.ok) throw new Error(`Native event ${response.status}`)
@@ -273,17 +289,15 @@ export function installBinaryBindings(names) {
         if (!direct[name]) {
             throw new Error(`Missing binary codec for ${name}`)
         }
-        if (typeof window[name] === 'function') {
-            window[name] = async (...args) => {
-                try {
-                    const data = await direct[name](...args)
-                    return data === null ? { ok: true } : { ok: true, data }
-                } catch (error) {
-                    return { ok: false, error: {
-                        code: error.status || 500,
-                        message: error.message || String(error)
-                    } }
-                }
+        window[name] = async (...args) => {
+            try {
+                const data = await direct[name](...args)
+                return data === null ? { ok: true } : { ok: true, data }
+            } catch (error) {
+                return { ok: false, error: {
+                    code: error.code || error.status || 500,
+                    message: error.message || String(error)
+                } }
             }
         }
     }

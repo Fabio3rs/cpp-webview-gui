@@ -5,6 +5,7 @@
 
 #include "app/cli_options.h"
 #include "app/binary_rpc_transport.h"
+#include "app/binding_policy.h"
 #include "app/config.h"
 #include "app/handlers.h"
 #include "app/shutdown_monitor.h"
@@ -150,8 +151,8 @@ class Application {
                 const auto left = in.i32();
                 const auto right = in.i32();
                 const auto sum = static_cast<std::int64_t>(left) + right;
-                if (sum < std::numeric_limits<std::int32_t>::min() ||
-                    sum > std::numeric_limits<std::int32_t>::max()) {
+                if (sum < (std::numeric_limits<std::int32_t>::min)() ||
+                    sum > (std::numeric_limits<std::int32_t>::max)()) {
                     throw binary_rpc::WireError("Integer overflow");
                 }
                 out.i32(static_cast<std::int32_t>(sum));
@@ -166,15 +167,23 @@ class Application {
             window_manager_->set_bindings_setup(
                 [this](webview::webview &w) { setup_bindings(w); });
 #if defined(__linux__)
-            setup_bindings(*window_, &binary_rpc);
-            const bool binary_ready = binary_rpc::install_transport(
-                *window_, std::move(binary_rpc));
-            if (binary_ready && !dev_mode_ && options_.url.empty()) {
-                window_->init("window.__APP_BINARY_RPC__ = true;");
-                window_manager_->set_binary_transport_enabled(true);
+            if (dev_mode_) {
+                setup_bindings(*window_);
+            } else if (should_install_bindings(dev_mode_, options_.url)) {
+                setup_bindings(*window_, &binary_rpc);
+                const bool binary_ready = binary_rpc::install_transport(
+                    *window_, std::move(binary_rpc));
+                if (binary_ready) {
+                    bindings::remove_legacy_bindings(*window_);
+                    window_->init("window.__APP_BINARY_RPC__ = { endpoint: '" +
+                                  std::string(binary_rpc::rpc_base) + "' };");
+                    window_manager_->set_binary_transport_enabled(true);
+                }
             }
 #else
-            setup_bindings(*window_);
+            if (should_install_bindings(dev_mode_, options_.url)) {
+                setup_bindings(*window_);
+            }
 #endif
 
             return true;

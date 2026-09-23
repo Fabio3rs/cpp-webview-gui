@@ -5,6 +5,8 @@
 
 #include "app/drag_tracker.h"
 #include "app/binary_rpc_transport.h"
+#include "app/binding_policy.h"
+#include "app/bindings_with_meta.h"
 #include "app/native_types.h"
 #include "app/window_platform.h"
 #include "webview/webview.h"
@@ -372,8 +374,8 @@ class WindowManager {
 
     static std::optional<int> rounded_value(std::optional<double> value) {
         if (!value || !std::isfinite(*value) ||
-            *value < std::numeric_limits<int>::min() ||
-            *value > std::numeric_limits<int>::max()) {
+            *value < (std::numeric_limits<int>::min)() ||
+            *value > (std::numeric_limits<int>::max)()) {
             return std::nullopt;
         }
         return static_cast<int>(std::lround(*value));
@@ -480,7 +482,9 @@ class WindowManager {
                                         child_handle.value());
             }
 
-            if (bindings_setup_) {
+            if (bindings_setup_ &&
+                should_install_bindings(
+                    dev_mode_, resolve_url(bootstrap_snapshot, window_id))) {
                 bindings_setup_(*window);
             }
             const bool binary_ready =
@@ -488,7 +492,9 @@ class WindowManager {
                 resolve_url(bootstrap_snapshot, window_id).empty() &&
                 binary_rpc::shares_transport_context(main_window_, *window);
             if (binary_ready) {
-                window->init("window.__APP_BINARY_RPC__ = true;");
+                bindings::remove_legacy_bindings(*window);
+                window->init("window.__APP_BINARY_RPC__ = { endpoint: '" +
+                             std::string(binary_rpc::rpc_base) + "' };");
             }
             load_content(*window, window_id, bootstrap_snapshot,
                          binary_ready);

@@ -162,7 +162,7 @@ class Writer {
   private:
     void check_length(std::size_t size) const {
         if (size > max_message_size - 4 ||
-            size > std::numeric_limits<std::uint32_t>::max() ||
+            size > (std::numeric_limits<std::uint32_t>::max)() ||
             data_.size() > max_message_size - 4 - size) {
             throw WireError("Message too large");
         }
@@ -183,19 +183,45 @@ class Dispatcher {
 
     [[nodiscard]] Bytes call(std::uint32_t id,
                              std::span<const std::uint8_t> request) const {
+        return call_impl(id, request, false);
+    }
+
+    // The transport response starts with a success byte. Writing it before
+    // the handler avoids copying large replies to prepend the envelope.
+    [[nodiscard]] Bytes call_enveloped(
+        std::uint32_t id, std::span<const std::uint8_t> request) const {
+        return call_impl(id, request, true);
+    }
+
+  private:
+    [[nodiscard]] Bytes call_impl(
+        std::uint32_t id, std::span<const std::uint8_t> request,
+        bool enveloped) const {
         auto found = handlers_.find(id);
         if (found == handlers_.end()) {
             throw WireError("Unknown method ID");
         }
         Reader reader(request);
         Writer writer;
+        if (enveloped) {
+            writer.u8(0);
+        }
         found->second(reader, writer);
         reader.finish();
         return std::move(writer).take();
     }
 
-  private:
     std::map<std::uint32_t, Handler> handlers_;
 };
+
+// Error envelope: u8(1), u32(code), UTF-8 string(message).
+[[nodiscard]] inline Bytes error_response(std::uint32_t code,
+                                          std::string_view message) {
+    Writer writer;
+    writer.u8(1);
+    writer.u32(code);
+    writer.string(message);
+    return std::move(writer).take();
+}
 
 } // namespace app::binary_rpc

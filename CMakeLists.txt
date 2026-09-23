@@ -350,6 +350,13 @@ list(FILTER LIB_SOURCES EXCLUDE REGEX ".*main\\.cpp$")
 # Cria a biblioteca estática
 add_library(${PROJECT_NAME}_lib STATIC ${LIB_SOURCES})
 
+if(WIN32)
+    target_compile_definitions(${PROJECT_NAME}_lib PUBLIC
+        NOMINMAX
+        WIN32_LEAN_AND_MEAN
+    )
+endif()
+
 target_include_directories(${PROJECT_NAME}_lib PUBLIC
     "${CMAKE_SOURCE_DIR}/src"
     "${CMAKE_SOURCE_DIR}/include"

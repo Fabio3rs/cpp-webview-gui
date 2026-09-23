@@ -25,13 +25,19 @@ A separate `echoBytesBinary` example carries raw bytes without JSON or base64.
 The transport accepts
 at most 16 MiB per message. Direct typed calls use little-endian integers and
 a 32-bit byte length for strings and byte arrays. The C++ and JS codecs also
-support optional values and vectors.
+support optional values and vectors. RPC responses start with `u8 status`:
+`0` is followed by the typed result, while `1` is followed by `u32 error_code`
+and a length-prefixed UTF-8 error message. HTTP errors are reserved for
+transport failures. The page receives the endpoint through
+`window.__APP_BINARY_RPC__.endpoint` instead of a hardcoded JS URL.
 
 The scheme is registered once per WebKit context. Embedded secondary windows
 sharing that context load with the binary origin and use the same dispatcher;
 windows on another context retain the legacy bridge. On Linux production pages,
 native events are queued as bytes and the page fetches each event after a small
-JavaScript notification containing only its numeric token.
+JavaScript notification containing only its numeric token. When the binary
+transport is ready, those pages remove the unused legacy JSON bindings and
+install their typed JS functions directly.
 
 This is a Linux production path. Vite pages have a different origin and remain
 on the existing JSON bridge in development; macOS and Windows still use the
@@ -42,6 +48,10 @@ echo and integer addition remain manually assigned. The JS list of named
 bindings is still maintained separately from C++ metadata; its test detects
 drift. Named IDs are derived from binding names and checked for collisions at
 startup.
+Production pages loaded from a caller-supplied URL do not receive native
+bindings. The same initial-load rule applies to auxiliary windows. Navigation
+away from an embedded privileged page still needs backend-specific enforcement
+before this is a complete origin policy.
 
 `tests/test_binary_rpc_webview.cpp` exercises a real WebKitGTK page with a
 15 MiB request and response, typed struct calls, a one-shot binary event, and a

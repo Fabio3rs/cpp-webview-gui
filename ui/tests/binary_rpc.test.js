@@ -6,6 +6,15 @@ import { readBootstrap, readOpaque, readOutsideDrop, readWindowList, writeBootst
 import { nativeBindingNames } from '../src/native_binding_names.js'
 import { readFileSync } from 'node:fs'
 
+const rpcConfig = { endpoint: 'app-rpc://native/' }
+const successResponse = bytes => {
+    const envelope = new Uint8Array(bytes.byteLength + 1)
+    envelope.set(bytes, 1)
+    return new Response(envelope)
+}
+const errorResponse = (code, message) =>
+    new Response(new WireWriter().u8(1).u32(code).string(message).finish())
+
 test('binary binding names cover the generated C++ registry', () => {
     const path = new URL('../src/generated/native-bindings.json', import.meta.url)
     const index = JSON.parse(readFileSync(path, 'utf8'))
@@ -15,8 +24,11 @@ test('binary binding names cover the generated C++ registry', () => {
 test('every application binding has a direct wire codec', () => {
     const originalWindow = globalThis.window
     try {
-        globalThis.window = { __APP_BINARY_RPC__: true }
+        globalThis.window = { __APP_BINARY_RPC__: rpcConfig }
         assert.doesNotThrow(() => installBinaryBindings(nativeBindingNames))
+        for (const name of nativeBindingNames) {
+            assert.equal(typeof window[name], 'function')
+        }
         assert.throws(() => installBinaryBindings(['unmapped']), /Missing binary codec/)
     } finally {
         globalThis.window = originalWindow
@@ -47,13 +59,13 @@ test('config binding uses typed wire values', async () => {
     const originalWindow = globalThis.window
     try {
         globalThis.window = {
-            __APP_BINARY_RPC__: true,
+            __APP_BINARY_RPC__: rpcConfig,
             getConfig: () => { throw new Error('legacy binding called') }
         }
         globalThis.fetch = async (url, options) => {
             assert.equal(url, `app-rpc://native/${methodId('getConfig')}`)
             assert.equal(options.body.byteLength, 0)
-            return new Response(new WireWriter().string('dark').string('pt-br').finish())
+            return successResponse(new WireWriter().string('dark').string('pt-br').finish())
         }
         installBinaryBindings(['getConfig'])
         assert.deepEqual(await window.getConfig(),
@@ -110,14 +122,50 @@ test('typed handler error retains legacy ok/error result', async () => {
     const originalWindow = globalThis.window
     try {
         globalThis.window = {
-            __APP_BINARY_RPC__: true,
+            __APP_BINARY_RPC__: rpcConfig,
             getBootstrap: () => { throw new Error('legacy binding called') }
         }
-        globalThis.fetch = async () => new Response('Bootstrap not found', { status: 400 })
+        globalThis.fetch = async () => errorResponse(400, 'Bootstrap not found')
         installBinaryBindings(['getBootstrap'])
         assert.deepEqual(await window.getBootstrap('missing'), {
             ok: false, error: { code: 400, message: 'Bootstrap not found' }
         })
+    } finally {
+        globalThis.fetch = originalFetch
+        globalThis.window = originalWindow
+    }
+})
+
+test('binary response rejects unknown status and trailing error bytes', async () => {
+    const originalFetch = globalThis.fetch
+    const originalWindow = globalThis.window
+    try {
+        globalThis.window = { __APP_BINARY_RPC__: rpcConfig }
+        globalThis.fetch = async () => new Response(Uint8Array.of(2))
+        await assert.rejects(getCounterBinary(), /Invalid binary response status/)
+        globalThis.fetch = async () => {
+            const error = new WireWriter().u8(1).u32(400).string('bad').u8(7)
+            return new Response(error.finish())
+        }
+        await assert.rejects(getCounterBinary(), /Trailing binary response bytes/)
+    } finally {
+        globalThis.fetch = originalFetch
+        globalThis.window = originalWindow
+    }
+})
+
+test('binary endpoint comes from the page configuration', async () => {
+    const originalFetch = globalThis.fetch
+    const originalWindow = globalThis.window
+    try {
+        globalThis.window = {
+            __APP_BINARY_RPC__: { endpoint: 'https://app.invalid/rpc/' }
+        }
+        globalThis.fetch = async url => {
+            assert.equal(url, `https://app.invalid/rpc/${methodId('getCounter')}`)
+            return successResponse(new WireWriter().i32(42).finish())
+        }
+        assert.equal(await getCounterBinary(), 42)
     } finally {
         globalThis.fetch = originalFetch
         globalThis.window = originalWindow
@@ -137,7 +185,7 @@ test('native events cross the scheme as bytes and preserve order', async () => {
             }
         }
         globalThis.window = {
-            __APP_BINARY_RPC__: true,
+            __APP_BINARY_RPC__: rpcConfig,
             dispatchEvent: event => received.push(event.detail)
         }
         globalThis.fetch = async (url, options) => {
@@ -163,7 +211,7 @@ test('ping uses typed optional input and struct response', async () => {
     const originalWindow = globalThis.window
     try {
         globalThis.window = {
-            __APP_BINARY_RPC__: true,
+            __APP_BINARY_RPC__: rpcConfig,
             ping: () => { throw new Error('legacy binding called') }
         }
         globalThis.fetch = async (url, options) => {
@@ -171,7 +219,7 @@ test('ping uses typed optional input and struct response', async () => {
             const input = new WireReader(options.body)
             assert.equal(input.optional(value => value.string()), 'hello')
             input.finish()
-            return new Response(new WireWriter().string('pong').string('hello').finish())
+            return successResponse(new WireWriter().string('pong').string('hello').finish())
         }
         installBinaryBindings(['ping'])
         assert.deepEqual(await window.ping('hello'),
@@ -187,12 +235,12 @@ test('primitive binding uses its direct wire codec', async () => {
     const originalWindow = globalThis.window
     try {
         globalThis.window = {
-            __APP_BINARY_RPC__: true,
+            __APP_BINARY_RPC__: rpcConfig,
             getCounter: () => { throw new Error('legacy binding called') }
         }
         globalThis.fetch = async (url) => {
             assert.equal(url, `app-rpc://native/${methodId('getCounter')}`)
-            return new Response(new WireWriter().i32(42).finish())
+            return successResponse(new WireWriter().i32(42).finish())
         }
         installBinaryBindings(['getCounter'])
         assert.deepEqual(await window.getCounter(), { ok: true, data: 42 })
@@ -234,12 +282,12 @@ test('typed call posts bytes and decodes native response', async () => {
     const originalFetch = globalThis.fetch
     const originalWindow = globalThis.window
     try {
-        globalThis.window = { __APP_BINARY_RPC__: true }
+        globalThis.window = { __APP_BINARY_RPC__: rpcConfig }
         globalThis.fetch = async (url, options) => {
             assert.equal(url, `app-rpc://native/${methodId('getCounter')}`)
             assert.equal(options.method, 'POST')
             assert.equal(options.body.byteLength, 0)
-            return new Response(new WireWriter().i32(42).finish())
+            return successResponse(new WireWriter().i32(42).finish())
         }
         assert.equal(await getCounterBinary(), 42)
     } finally {
@@ -252,14 +300,14 @@ test('binary payload retains its bytes', async () => {
     const originalFetch = globalThis.fetch
     const originalWindow = globalThis.window
     try {
-        globalThis.window = { __APP_BINARY_RPC__: true }
+        globalThis.window = { __APP_BINARY_RPC__: rpcConfig }
         const source = new Uint8Array([0, 255, 17, 42])
         globalThis.fetch = async (url, options) => {
             assert.equal(url, 'app-rpc://native/5')
             const input = new WireReader(options.body)
             assert.deepEqual(input.bytes(), source)
             input.finish()
-            return new Response(new WireWriter().bytes(source).finish())
+            return successResponse(new WireWriter().bytes(source).finish())
         }
         assert.deepEqual(await echoBytesBinary(source), source)
     } finally {

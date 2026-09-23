@@ -1,4 +1,5 @@
 #include "app/binary_rpc.h"
+#include "app/binding_policy.h"
 #include "app/wire_codec.h"
 #include <gtest/gtest.h>
 
@@ -8,6 +9,14 @@
 #include <string>
 
 namespace rpc = app::binary_rpc;
+
+TEST(BindingPolicy, ExternalProductionUrlHasNoNativeBindings) {
+    EXPECT_TRUE(app::should_install_bindings(false, ""));
+    EXPECT_FALSE(app::should_install_bindings(false,
+                                              "https://example.invalid/page"));
+    EXPECT_TRUE(app::should_install_bindings(true,
+                                             "http://localhost:5173"));
+}
 
 TEST(BinaryWire, RoundTripsPrimitiveValues) {
     rpc::Writer writer;
@@ -74,6 +83,25 @@ TEST(BinaryDispatcher, RejectsUnknownAndExtraArguments) {
     EXPECT_THROW(static_cast<void>(dispatcher.call(7, extra)), rpc::WireError);
     EXPECT_THROW(static_cast<void>(dispatcher.call(8, {})), rpc::WireError);
     EXPECT_THROW(dispatcher.bind(7, [](auto &, auto &) {}), rpc::WireError);
+}
+
+TEST(BinaryDispatcher, EnvelopesTransportResponsesWithoutChangingPayload) {
+    rpc::Dispatcher dispatcher;
+    dispatcher.bind(7, [](rpc::Reader &, rpc::Writer &writer) {
+        writer.i32(42);
+    });
+    const auto response = dispatcher.call_enveloped(7, {});
+    rpc::Reader reader(response);
+    EXPECT_EQ(reader.u8(), 0);
+    EXPECT_EQ(reader.i32(), 42);
+    EXPECT_NO_THROW(reader.finish());
+
+    const auto error = rpc::error_response(400, "Invalid input");
+    rpc::Reader error_reader(error);
+    EXPECT_EQ(error_reader.u8(), 1);
+    EXPECT_EQ(error_reader.u32(), 400U);
+    EXPECT_EQ(error_reader.string(), "Invalid input");
+    EXPECT_NO_THROW(error_reader.finish());
 }
 
 TEST(BinaryWireCodec, ComposesOptionalVectorAndUtf8) {

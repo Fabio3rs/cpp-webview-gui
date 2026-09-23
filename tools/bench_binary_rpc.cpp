@@ -52,7 +52,8 @@ int main() {
             headers: {'Content-Type': 'application/octet-stream'}
           });
           const data = new DataView(await response.arrayBuffer());
-          if (data.getInt32(0, true) !== 42) throw new Error('binary counter');
+          if (data.getUint8(0) !== 0 || data.getInt32(1, true) !== 42)
+            throw new Error('binary counter');
         };
         const jsonSmall = async () => {
           if (await legacyCounter() !== 42) throw new Error('JSON counter');
@@ -67,7 +68,8 @@ int main() {
             headers: {'Content-Type': 'application/octet-stream'}
           });
           const bytes = new Uint8Array(await response.arrayBuffer());
-          if (bytes[7] !== 42) throw new Error('CBOR counter');
+          if (bytes[0] !== 0 || bytes[8] !== 42)
+            throw new Error('CBOR counter');
         };
         await measure(20, jsonSmall);
         await measure(20, binarySmall);
@@ -86,7 +88,8 @@ int main() {
             headers: {'Content-Type': 'application/octet-stream'}
           });
           const result = new Uint8Array(await response.arrayBuffer());
-          if (result.length !== payload.length || result[4] !== 0xab) {
+          if (result[0] !== 0 || result.length !== payload.length + 1 ||
+              result[5] !== 0xab) {
             throw new Error('binary bulk');
           }
         };

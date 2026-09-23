@@ -19,7 +19,6 @@ namespace app::binary_rpc {
 #if WEBKIT_CHECK_VERSION(2, 40, 0)
 namespace {
 
-constexpr std::string_view prefix = "app-rpc://native/";
 constexpr std::string_view event_prefix = "app-rpc://native/event/";
 constexpr std::size_t chunk_size = 8192;
 constexpr std::size_t max_pending_events = 64;
@@ -98,11 +97,11 @@ void on_request(WebKitURISchemeRequest *request, gpointer data) {
                "application/octet-stream");
         return;
     }
-    if (!uri.starts_with(prefix)) {
+    if (!uri.starts_with(rpc_base)) {
         finish(request, {}, HttpStatus::not_found, "application/octet-stream");
         return;
     }
-    const auto id_text = uri.substr(prefix.size());
+    const auto id_text = uri.substr(rpc_base.size());
     std::uint32_t id = 0;
     const auto parsed =
         std::from_chars(id_text.data(), id_text.data() + id_text.size(), id);
@@ -153,23 +152,27 @@ void on_request(WebKitURISchemeRequest *request, gpointer data) {
         }
     }
     try {
-        finish(request, (*state)->dispatcher.call(id, body), HttpStatus::ok,
+        finish(request, (*state)->dispatcher.call_enveloped(id, body), HttpStatus::ok,
                "application/octet-stream");
     } catch (const bindings::BindingError &error) {
-        const auto message = std::string_view(error.what());
-        const auto status = error.code() == bindings::ErrorCode::InternalError
-                                ? HttpStatus::server_error
-                                : HttpStatus::bad_request;
-        finish(request, Bytes(message.begin(), message.end()), status,
-               "text/plain; charset=utf-8");
+        finish(request,
+               error_response(static_cast<std::uint32_t>(error.code()),
+                              error.what()),
+               HttpStatus::ok, "application/octet-stream");
     } catch (const WireError &error) {
-        const auto message = std::string_view(error.what());
-        finish(request, Bytes(message.begin(), message.end()),
-               HttpStatus::bad_request, "text/plain; charset=utf-8");
+        finish(request,
+               error_response(
+                   static_cast<std::uint32_t>(bindings::ErrorCode::InvalidArgs),
+                   error.what()),
+               HttpStatus::ok,
+               "application/octet-stream");
     } catch (const std::exception &error) {
-        const auto message = std::string_view(error.what());
-        finish(request, Bytes(message.begin(), message.end()),
-               HttpStatus::server_error, "text/plain; charset=utf-8");
+        finish(request,
+               error_response(static_cast<std::uint32_t>(
+                                  bindings::ErrorCode::InternalError),
+                              error.what()),
+               HttpStatus::ok,
+               "application/octet-stream");
     }
 }
 
