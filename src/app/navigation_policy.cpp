@@ -76,10 +76,4 @@ bool install_navigation_guard(webview::webview &window,
 }
 
 } // namespace app
-#else
-namespace app {
-bool install_navigation_guard(webview::webview &, std::string_view) {
-    return false;
-}
-} // namespace app
 #endif

@@ -1,6 +1,16 @@
 cmake_minimum_required(VERSION 3.28)
 project(app LANGUAGES CXX C)
 
+if(APPLE)
+    if(NOT DEFINED CMAKE_OBJCXX_COMPILER)
+        set(CMAKE_OBJCXX_COMPILER "${CMAKE_CXX_COMPILER}" CACHE FILEPATH
+            "Objective-C++ compiler for WebKit adapters")
+    endif()
+    enable_language(OBJCXX)
+    set(CMAKE_OBJCXX_STANDARD 20)
+    set(CMAKE_OBJCXX_STANDARD_REQUIRED ON)
+endif()
+
 # ==============================================================================
 # Configurações de padrão C++
 # ==============================================================================
@@ -346,9 +356,18 @@ target_compile_features(cli_parser INTERFACE cxx_std_20)
 # Coleta todos os .cpp em src/ exceto main.cpp
 file(GLOB_RECURSE LIB_SOURCES "${CMAKE_SOURCE_DIR}/src/*.cpp")
 list(FILTER LIB_SOURCES EXCLUDE REGEX ".*main\\.cpp$")
+list(FILTER LIB_SOURCES EXCLUDE REGEX ".*navigation_guard_win32\\.cpp$")
 
 # Cria a biblioteca estática
 add_library(${PROJECT_NAME}_lib STATIC ${LIB_SOURCES})
+
+if(APPLE)
+    target_sources(${PROJECT_NAME}_lib PRIVATE
+        src/app/navigation_guard_macos.mm)
+elseif(WIN32)
+    target_sources(${PROJECT_NAME}_lib PRIVATE
+        src/app/navigation_guard_win32.cpp)
+endif()
 
 if(WIN32)
     target_compile_definitions(${PROJECT_NAME}_lib PUBLIC

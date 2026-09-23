@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace app {
 
@@ -111,18 +112,53 @@ parse_trusted_origin(std::string_view url) {
 enum class NavigationDecision { allow, deny, open_external };
 
 [[nodiscard]] inline NavigationDecision
+decide_opaque_navigation(std::string_view target_url, bool user_gesture,
+                         bool link_clicked) {
+    const auto target = parse_trusted_origin(target_url);
+    if (user_gesture && link_clicked && target &&
+        (target->scheme == "http" || target->scheme == "https")) {
+        return NavigationDecision::open_external;
+    }
+    return NavigationDecision::deny;
+}
+
+[[nodiscard]] inline NavigationDecision
 decide_navigation(std::string_view target_url, const TrustedOrigin &trusted,
                   bool new_window, bool user_gesture, bool link_clicked) {
     if (is_trusted_navigation(target_url, trusted)) {
         return new_window ? NavigationDecision::deny
                           : NavigationDecision::allow;
     }
-    const auto external = parse_trusted_origin(target_url);
-    if (user_gesture && link_clicked && external &&
-        (external->scheme == "http" || external->scheme == "https")) {
-        return NavigationDecision::open_external;
-    }
-    return NavigationDecision::deny;
+    return decide_opaque_navigation(target_url, user_gesture, link_clicked);
 }
+
+class NavigationSession {
+  public:
+    explicit NavigationSession(std::optional<TrustedOrigin> origin)
+        : origin_(std::move(origin)),
+          initial_embedded_document_(origin_ == std::nullopt) {}
+
+    [[nodiscard]] NavigationDecision decide(std::string_view target_url,
+                                            bool main_frame, bool new_window,
+                                            bool user_gesture,
+                                            bool link_clicked) {
+        if (initial_embedded_document_ && main_frame && !new_window &&
+            (target_url.empty() || target_url == "about:blank")) {
+            initial_embedded_document_ = false;
+            return NavigationDecision::allow;
+        }
+        if (origin_) {
+            return decide_navigation(target_url, *origin_, new_window,
+                                     user_gesture, link_clicked);
+        }
+        return decide_opaque_navigation(target_url, user_gesture, link_clicked);
+    }
+
+    void document_loaded() noexcept { initial_embedded_document_ = false; }
+
+  private:
+    std::optional<TrustedOrigin> origin_;
+    bool initial_embedded_document_;
+};
 
 } // namespace app

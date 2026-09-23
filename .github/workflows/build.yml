@@ -156,15 +156,20 @@ jobs:
             -DENABLE_SANITIZERS=ON \
             -DCMAKE_C_COMPILER="$CC" \
             -DCMAKE_CXX_COMPILER="$CXX" \
+            -DCMAKE_OBJCXX_COMPILER="$CXX" \
             -DCMAKE_AR="$AR" \
             -DCMAKE_RANLIB="$RANLIB" \
             -DCMAKE_CXX_STANDARD=20 \
             -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
+            -DCMAKE_OBJCXX_FLAGS="$CXXFLAGS" \
             -DCMAKE_EXE_LINKER_FLAGS="$LDFLAGS" \
             -DCMAKE_SHARED_LINKER_FLAGS="$LDFLAGS"
 
       - name: Build
         run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
 
       - name: Verify executable exists
         run: |
@@ -206,6 +211,9 @@ jobs:
 
       - name: Build
         run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
 
       - name: Verify executable exists
         run: |

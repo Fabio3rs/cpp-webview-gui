@@ -495,13 +495,18 @@ class WindowManager {
                     trusted = content_url.empty();
                 }
             }
+            std::string_view trusted_navigation_url = dev_url_;
+            if (!dev_mode_) {
 #if defined(__linux__)
-            if (trusted && !install_navigation_guard(
-                               *window, dev_mode_ ? std::string_view(dev_url_)
-                                                  : binary_rpc::rpc_base)) {
+                trusted_navigation_url = binary_rpc::rpc_base;
+#else
+                trusted_navigation_url = {};
+#endif
+            }
+            if (trusted && !install_navigation_guard(*window,
+                                                     trusted_navigation_url)) {
                 throw std::runtime_error("Failed to guard child navigation");
             }
-#endif
             if (bindings_setup_ && trusted) {
                 bindings_setup_(*window);
             }

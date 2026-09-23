@@ -168,14 +168,18 @@ class Application {
                 config::WINDOW_TITLE);
             window_manager_->set_bindings_setup(
                 [this](webview::webview &w) { setup_bindings(w); });
+            std::string_view trusted_navigation_url = dev_url_;
+            if (!dev_mode_) {
 #if defined(__linux__)
+                trusted_navigation_url = binary_rpc::rpc_base;
+#else
+                trusted_navigation_url = {};
+#endif
+            }
             if (should_install_bindings(options_.url) &&
-                !install_navigation_guard(
-                    *window_, dev_mode_ ? std::string_view(dev_url_)
-                                        : binary_rpc::rpc_base)) {
+                !install_navigation_guard(*window_, trusted_navigation_url)) {
                 throw std::runtime_error("Failed to guard privileged navigation");
             }
-#endif
 #if defined(__linux__)
             if (dev_mode_) {
                 setup_bindings(*window_);

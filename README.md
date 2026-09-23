@@ -52,13 +52,16 @@ Pages loaded from a caller-supplied `--url` do not receive native bindings,
 including in development. A development window is privileged only when it
 loads the configured Vite origin. Auxiliary windows receive bindings only when
 their initial URL has the trusted origin, or when they load the embedded page.
-On Linux, privileged WebViews block navigation to other origins before the new
-document loads. New window actions outside the application's native window
-API are blocked. The context-wide binary endpoint also checks that its request
-comes from an authorized WebView and rejects an explicitly foreign `Origin`.
-User-clicked external HTTP(S) links open in the system browser; script-initiated
-navigation and other schemes stay blocked. Windows and macOS still need matching
-navigation guards when their binary transports are added.
+Privileged WebViews block navigation to other origins before the new document
+loads. On Windows and macOS, production's embedded document has no application
+URL, so only its initial blank load is allowed. New window actions outside the
+application's native window API are blocked. User-clicked external HTTP(S)
+links open in the system browser on Linux and macOS. WebView2 exposes a user
+gesture flag for new windows, which allows those external HTTP(S) targets to
+open in the system browser; external top-level navigation remains blocked.
+Script-initiated navigation and other schemes stay blocked. On Linux, the
+context-wide binary endpoint also checks that its request comes from an
+authorized WebView and rejects an explicitly foreign `Origin`.
 
 `tests/test_binary_rpc_webview.cpp` exercises a real WebKitGTK page with a
 15 MiB request and response, typed struct calls, a one-shot binary event, and a

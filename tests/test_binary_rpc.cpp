@@ -76,6 +76,34 @@ TEST(NavigationPolicy, OpensOnlyUserClickedExternalWebLinks) {
     EXPECT_EQ(app::decide_navigation("app-rpc://native/page", *trusted,
                                      true, true, true),
               Decision::deny);
+    EXPECT_EQ(app::decide_opaque_navigation("https://example.invalid/", true,
+                                            true),
+              Decision::open_external);
+    EXPECT_EQ(app::decide_opaque_navigation("about:blank", true, true),
+              Decision::deny);
+}
+
+TEST(NavigationPolicy, EmbeddedDocumentAllowsOnlyItsInitialBlankNavigation) {
+    app::NavigationSession session(std::nullopt);
+    using Decision = app::NavigationDecision;
+    EXPECT_EQ(session.decide("about:blank", false, false, false, false),
+              Decision::deny);
+    EXPECT_EQ(session.decide("about:blank", true, false, false, false),
+              Decision::allow);
+    EXPECT_EQ(session.decide("about:blank", true, false, false, false),
+              Decision::deny);
+    EXPECT_EQ(session.decide("https://example.invalid/", true, false, false,
+                             false),
+              Decision::deny);
+    EXPECT_EQ(session.decide("https://example.invalid/", true, true, true,
+                             true),
+              Decision::open_external);
+
+    app::NavigationSession empty_url_session(std::nullopt);
+    EXPECT_EQ(empty_url_session.decide("", true, false, false, false),
+              Decision::allow);
+    EXPECT_EQ(empty_url_session.decide("", true, false, false, false),
+              Decision::deny);
 }
 
 TEST(BinaryWire, RoundTripsPrimitiveValues) {
