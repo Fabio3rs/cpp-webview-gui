@@ -1,11 +1,10 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.28)
 project(app LANGUAGES CXX C)
 
 # ==============================================================================
 # Configurações de padrão C++
 # ==============================================================================
-# Nota: C++20 é usado porque webview 0.12.0 tem bugs com Clang + C++23
-# (incomplete type 'user_script::impl' com std::unique_ptr)
+# O template usa C++20; o fork atual da webview também suporta C++23.
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -263,13 +262,15 @@ endif()
 # ------------------------------------------------------------------------------
 # WebView - Sempre baixa (não tem pacote de sistema comum)
 # ------------------------------------------------------------------------------
-FetchContent_Declare(
-    webview
-    GIT_REPOSITORY https://github.com/webview/webview
-    GIT_TAG 0.12.0
-    GIT_SHALLOW TRUE
-)
-FetchContent_MakeAvailable(webview)
+# FetchContent_Declare(
+#     webview
+#     GIT_REPOSITORY https://github.com/webview/webview
+#     GIT_TAG 0.12.0
+#     GIT_SHALLOW TRUE
+# )
+# FetchContent_MakeAvailable(webview)
+
+add_subdirectory(vendor/webview SYSTEM)
 
 # ==============================================================================
 # Paths do UI
@@ -285,7 +286,7 @@ set(UI_EMBEDDED_H "${CMAKE_BINARY_DIR}/generated/index_html_embedded.h")
 # ==============================================================================
 if(NOT DEV_MODE)
     # Arquivos fonte do UI para detectar alterações (exclui dist/)
-    file(GLOB UI_SRC_FILES "${UI_DIR}/src/*")
+    file(GLOB_RECURSE UI_SRC_FILES CONFIGURE_DEPENDS "${UI_DIR}/src/*")
     set(UI_SOURCES
         "${UI_DIR}/index.html"
         "${UI_DIR}/vite.config.js"
@@ -415,6 +416,12 @@ endif()
 # Target principal (executável)
 # ==============================================================================
 add_executable(app WIN32 src/main.cpp)
+
+if(UNIX AND NOT APPLE)
+    add_executable(bench_binary_rpc EXCLUDE_FROM_ALL tools/bench_binary_rpc.cpp)
+    target_link_libraries(bench_binary_rpc PRIVATE ${PROJECT_NAME}_lib)
+    target_compile_options(bench_binary_rpc PRIVATE ${PROJECT_WARNING_FLAGS})
+endif()
 
 # Linka contra a lib do projeto (herda includes e dependências)
 target_link_libraries(app PRIVATE ${PROJECT_NAME}_lib)

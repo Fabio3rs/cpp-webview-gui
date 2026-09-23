@@ -1,6 +1,8 @@
 import { createApp } from 'vue'
 import App from './App.vue'
 import { registerDockPanels } from './dock_panels'
+import { installBinaryBindings } from './binary_rpc'
+import { nativeBindingNames } from './native_binding_names'
 import 'dockview-vue/dist/styles/dockview.css'
 import './style.css'
 
@@ -154,6 +156,7 @@ function installNativeMessageBridge() {
   })
 }
 
+installBinaryBindings(nativeBindingNames)
 installNativeWindowOpen()
 installNativeMessageBridge()
 

@@ -61,14 +61,15 @@ class HandlerRegistry {
 // setup - Registro dos bindings da aplicação
 // =============================================================================
 
-inline void setup(webview::webview &w, const HandlerRegistry &handlers) {
+inline void setup(webview::webview &w, const HandlerRegistry &handlers,
+                  binary_rpc::Dispatcher *binary = nullptr) {
     // Handlers que retornam JSON estruturado - mantêm bind_typed
-    APP_BIND_TYPED(w, "ping", [&handlers](std::optional<std::string> msg) {
+    APP_BIND_TYPED_BINARY(w, binary, "ping", [&handlers](std::optional<std::string> msg) {
         return handlers.ping(msg);
     });
-    APP_BIND_TYPED(w, "getVersion",
+    APP_BIND_TYPED_BINARY(w, binary, "getVersion",
                    [&handlers]() { return handlers.get_version(); });
-    APP_BIND_TYPED(w, "openFile", [&handlers](const std::string &path) {
+    APP_BIND_TYPED_BINARY(w, binary, "openFile", [&handlers](const std::string &path) {
         return handlers.open_file(path);
     });
 
@@ -83,13 +84,13 @@ inline void setup(webview::webview &w, const HandlerRegistry &handlers) {
     // });
 
     // Tipos simples - usando bind_generic para flexibilidade
-    APP_BIND_TYPED(w, "getCounter", []() { return 42; });
-    APP_BIND_TYPED(w, "getPi", []() { return 3.14159; });
-    APP_BIND_TYPED(w, "getStatus", []() { return std::string("online"); });
-    APP_BIND_TYPED(w, "isReady", []() { return true; });
+    APP_BIND_TYPED_BINARY(w, binary, "getCounter", []() { return 42; });
+    APP_BIND_TYPED_BINARY(w, binary, "getPi", []() { return 3.14159; });
+    APP_BIND_TYPED_BINARY(w, binary, "getStatus", []() { return std::string("online"); });
+    APP_BIND_TYPED_BINARY(w, binary, "isReady", []() { return true; });
 
     // JSON - retorna diretamente (sem embrulho)
-    APP_BIND_TYPED(w, "getConfig", ([]() {
+    APP_BIND_TYPED_BINARY(w, binary, "getConfig", ([]() {
                        return nlohmann::json{{"theme", "dark"},
                                              {"lang", "pt-br"}};
                    }));

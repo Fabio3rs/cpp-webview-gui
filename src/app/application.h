@@ -4,6 +4,7 @@
 // =============================================================================
 
 #include "app/cli_options.h"
+#include "app/binary_rpc_transport.h"
 #include "app/config.h"
 #include "app/handlers.h"
 #include "app/shutdown_monitor.h"
@@ -133,13 +134,45 @@ class Application {
             window_->set_size(width, height, WEBVIEW_HINT_NONE);
             window_->init("window.__APP_WINDOW_ID__ = \"main\";");
 
+#if defined(__linux__)
+            binary_rpc::Dispatcher binary_rpc;
+            binary_rpc.bind(1, [](auto &, auto &out) { out.i32(42); });
+            binary_rpc.bind(2, [](auto &, auto &out) { out.f64(3.14159); });
+            binary_rpc.bind(3, [](auto &, auto &out) { out.u8(1); });
+            binary_rpc.bind(4, [](auto &, auto &out) {
+                out.string("online");
+            });
+            binary_rpc.bind(5, [](auto &in, auto &out) {
+                out.bytes(in.bytes());
+            });
+            binary_rpc.bind(6, [](auto &in, auto &out) {
+                const auto left = in.i32();
+                const auto right = in.i32();
+                const auto sum = static_cast<std::int64_t>(left) + right;
+                if (sum < std::numeric_limits<std::int32_t>::min() ||
+                    sum > std::numeric_limits<std::int32_t>::max()) {
+                    throw binary_rpc::WireError("Integer overflow");
+                }
+                out.i32(static_cast<std::int32_t>(sum));
+            });
+#endif
+
             // Setup window manager and bindings
             window_manager_ = std::make_unique<WindowManager>(
                 *window_, dev_mode_, dev_url_, options_.url, width, height,
                 config::WINDOW_TITLE);
             window_manager_->set_bindings_setup(
                 [this](webview::webview &w) { setup_bindings(w); });
+#if defined(__linux__)
+            setup_bindings(*window_, &binary_rpc);
+            const bool binary_ready = binary_rpc::install_transport(
+                *window_, std::move(binary_rpc));
+            if (binary_ready && !dev_mode_ && options_.url.empty()) {
+                window_->init("window.__APP_BINARY_RPC__ = true;");
+            }
+#else
             setup_bindings(*window_);
+#endif
 
             return true;
         } catch (const webview::exception &e) {
@@ -170,7 +203,7 @@ class Application {
             window_->set_html("<!doctype html><html><body></body></html>");
 #else
             std::cout << "[APP] Carregando HTML embutido..." << std::endl;
-            window_->set_html(INDEX_HTML);
+            binary_rpc::load_html_with_binary_origin(*window_, INDEX_HTML);
 #endif
         }
     }
@@ -237,17 +270,18 @@ class Application {
 
     bool should_shutdown() const { return shutdown_requested_.load(); }
 
-    void setup_bindings(webview::webview &w) {
-        app::setup(w, handlers_);
+    void setup_bindings(webview::webview &w,
+                        binary_rpc::Dispatcher *binary = nullptr) {
+        app::setup(w, handlers_, binary);
         if (!window_manager_) {
             return;
         }
 
-        APP_BIND_TYPED(w, "createNativeWindow",
+        APP_BIND_TYPED_BINARY(w, binary, "createNativeWindow",
                        [this](app::bindings::json bootstrap) {
                            return window_manager_->create_window(bootstrap);
                        });
-        APP_BIND_TYPED(w, "getBootstrap", [this](const std::string &window_id) {
+        APP_BIND_TYPED_BINARY(w, binary, "getBootstrap", [this](const std::string &window_id) {
             auto bootstrap = window_manager_->take_bootstrap(window_id);
             if (!bootstrap) {
                 throw app::bindings::BindingError(
@@ -256,8 +290,8 @@ class Application {
             }
             return *bootstrap;
         });
-        APP_BIND_TYPED(
-            w, "postNativeEvent",
+        APP_BIND_TYPED_BINARY(
+            w, binary, "postNativeEvent",
             [this](const std::string &window_id, app::bindings::json event) {
                 if (!window_manager_->post_event(window_id, event)) {
                     throw app::bindings::BindingError(
@@ -265,7 +299,7 @@ class Application {
                         app::bindings::ErrorCode::MissingArg);
                 }
             });
-        APP_BIND_TYPED(w, "closeNativeWindow",
+        APP_BIND_TYPED_BINARY(w, binary, "closeNativeWindow",
                        [this](const std::string &window_id) {
                            if (!window_manager_->close_window(window_id)) {
                                throw app::bindings::BindingError(
@@ -273,21 +307,21 @@ class Application {
                                    app::bindings::ErrorCode::MissingArg);
                            }
                        });
-        APP_BIND_TYPED(w, "listNativeWindows",
+        APP_BIND_TYPED_BINARY(w, binary, "listNativeWindows",
                        [this]() { return window_manager_->list_windows(); });
-        APP_BIND_TYPED(
-            w, "startNativeDrag",
+        APP_BIND_TYPED_BINARY(
+            w, binary, "startNativeDrag",
             [this](const std::string &window_id, app::bindings::json payload) {
                 window_manager_->start_drag_tracking(window_id, payload);
             });
-        APP_BIND_TYPED(w, "completeNativeDrag",
+        APP_BIND_TYPED_BINARY(w, binary, "completeNativeDrag",
                        [this](const std::string &target_window_id) {
                            return window_manager_->complete_drag_tracking(
                                target_window_id);
                        });
-        APP_BIND_TYPED(w, "stopNativeDrag",
+        APP_BIND_TYPED_BINARY(w, binary, "stopNativeDrag",
                        [this]() { window_manager_->stop_drag_tracking(); });
-        APP_BIND_TYPED(w, "completeNativeDragOutside",
+        APP_BIND_TYPED_BINARY(w, binary, "completeNativeDragOutside",
                        [this](const std::string &window_id) {
                            return window_manager_->complete_drag_outside(
                                window_id);

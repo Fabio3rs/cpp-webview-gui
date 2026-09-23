@@ -1,10 +1,22 @@
 <script setup>
-import { inject, ref } from 'vue'
+import { inject, onMounted, ref } from 'vue'
 import { getPanelBounds } from './panel_utils'
 
 const popoutPanel = inject('popoutPanel', null)
 
 const root = ref(null)
+const nativeCounter = ref(null)
+
+onMounted(async () => {
+    if (typeof window.getCounter === 'function') {
+        try {
+            const response = await window.getCounter()
+            if (response?.ok) nativeCounter.value = response.data
+        } catch (error) {
+            console.error('[UI] Binary RPC failed:', error)
+        }
+    }
+})
 
 const props = defineProps({
     params: {
@@ -45,6 +57,10 @@ function popout() {
             <div class="panel-card">
                 <span class="panel-label">Panels</span>
                 <strong class="panel-value">Dockview</strong>
+            </div>
+            <div v-if="nativeCounter !== null" class="panel-card">
+                <span class="panel-label">Counter</span>
+                <strong class="panel-value">{{ nativeCounter }}</strong>
             </div>
         </div>
     </div>

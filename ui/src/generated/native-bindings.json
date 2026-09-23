@@ -3,204 +3,204 @@
     "begin": {
       "column": 25,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
-      "line": 275
+      "line": 309
     },
     "end": {
       "column": 25,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
-      "line": 275
+      "line": 309
     }
   },
   "completeNativeDrag": {
     "begin": {
       "column": 25,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
-      "line": 287
+      "line": 321
     },
     "end": {
       "column": 25,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
-      "line": 287
+      "line": 321
     }
   },
   "completeNativeDragOutside": {
     "begin": {
       "column": 25,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
-      "line": 294
+      "line": 328
     },
     "end": {
       "column": 25,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
-      "line": 294
+      "line": 328
     }
   },
   "createNativeWindow": {
     "begin": {
       "column": 25,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
-      "line": 249
+      "line": 283
     },
     "end": {
       "column": 25,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
-      "line": 249
+      "line": 283
     }
   },
   "getBootstrap": {
     "begin": {
       "column": 10,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
-      "line": 258
+      "line": 292
     },
     "end": {
       "column": 10,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
-      "line": 258
+      "line": 292
     }
   },
   "getConfig": {
     "begin": {
       "column": 22,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
-      "line": 95
+      "line": 96
     },
     "end": {
       "column": 22,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
-      "line": 95
+      "line": 96
     }
   },
   "getCounter": {
     "begin": {
-      "column": 56,
+      "column": 71,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
-      "line": 86
+      "line": 87
     },
     "end": {
-      "column": 56,
+      "column": 71,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
-      "line": 86
+      "line": 87
     }
   },
   "getPi": {
     "begin": {
-      "column": 56,
+      "column": 71,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
-      "line": 87
+      "line": 88
     },
     "end": {
-      "column": 56,
+      "column": 71,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
-      "line": 87
+      "line": 88
     }
   },
   "getStatus": {
     "begin": {
-      "column": 74,
+      "column": 89,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
-      "line": 88
+      "line": 89
     },
     "end": {
-      "column": 74,
+      "column": 89,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
-      "line": 88
+      "line": 89
     }
   },
   "getVersion": {
     "begin": {
       "column": 68,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
-      "line": 70
+      "line": 71
     },
     "end": {
       "column": 68,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
-      "line": 70
+      "line": 71
     }
   },
   "isReady": {
     "begin": {
-      "column": 55,
+      "column": 70,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
-      "line": 89
+      "line": 90
     },
     "end": {
-      "column": 55,
+      "column": 70,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
-      "line": 89
+      "line": 90
     }
   },
   "listNativeWindows": {
     "begin": {
       "column": 76,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
-      "line": 277
+      "line": 311
     },
     "end": {
       "column": 76,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
-      "line": 277
+      "line": 311
     }
   },
   "openFile": {
     "begin": {
       "column": 6,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
-      "line": 73
+      "line": 74
     },
     "end": {
       "column": 6,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
-      "line": 73
+      "line": 74
     }
   },
   "ping": {
     "begin": {
       "column": 6,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
-      "line": 68
+      "line": 69
     },
     "end": {
       "column": 6,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/handlers.h",
-      "line": 68
+      "line": 69
     }
   },
   "postNativeEvent": {
     "begin": {
       "column": 14,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
-      "line": 267
+      "line": 301
     },
     "end": {
       "column": 14,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
-      "line": 267
+      "line": 301
     }
   },
   "startNativeDrag": {
     "begin": {
       "column": 14,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
-      "line": 282
+      "line": 316
     },
     "end": {
       "column": 14,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
-      "line": 282
+      "line": 316
     }
   },
   "stopNativeDrag": {
     "begin": {
       "column": 75,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
-      "line": 289
+      "line": 323
     },
     "end": {
       "column": 75,
       "file": "/mnt/projects/Projects/cpp-webview-gui/src/app/application.h",
-      "line": 289
+      "line": 323
     }
   }
 }

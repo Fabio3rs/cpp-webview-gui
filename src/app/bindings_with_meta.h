@@ -2,6 +2,7 @@
 
 #include "app/bindings.h"
 #include "app/bindings_meta.h"
+#include "app/binary_rpc_bindings.h"
 
 namespace app::bindings {
 
@@ -17,10 +18,35 @@ void bind_typed_with_meta(
 
 } // namespace app::bindings
 
+namespace app::bindings {
+
+template <typename F>
+void bind_typed_with_binary_meta(
+    webview::webview &w, binary_rpc::Dispatcher *binary, const std::string &name,
+    F &&func, std::source_location begin = std::source_location::current(),
+    std::source_location end = std::source_location::current()) {
+    using Callable = std::decay_t<F>;
+    Callable callable(std::forward<F>(func));
+    bind_typed_with_meta(w, name, callable, begin, end);
+    if (binary) {
+        binary_rpc::bind_cbor(*binary, name, callable);
+    }
+}
+
+} // namespace app::bindings
+
 // Backwards-compatible macro: usual single-location form
 #define APP_BIND_TYPED(wv, jsName, func)                                       \
     {                                                                          \
         constexpr auto _bind_begin = std::source_location::current();          \
         ::app::bindings::bind_typed_with_meta(                                 \
             wv, jsName, (func), _bind_begin, std::source_location::current()); \
+    }
+
+#define APP_BIND_TYPED_BINARY(wv, rpc, jsName, func)                           \
+    {                                                                          \
+        constexpr auto _bind_begin = std::source_location::current();          \
+        ::app::bindings::bind_typed_with_binary_meta(                          \
+            wv, rpc, jsName, (func), _bind_begin,                               \
+            std::source_location::current());                                  \
     }

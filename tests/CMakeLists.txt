@@ -25,3 +25,20 @@ target_link_libraries(option_parser_tests
 )
 target_compile_options(option_parser_tests PRIVATE ${PROJECT_WARNING_FLAGS})
 gtest_discover_tests(option_parser_tests)
+
+add_executable(binary_rpc_tests test_binary_rpc.cpp)
+target_include_directories(binary_rpc_tests PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(binary_rpc_tests PRIVATE GTest::gtest_main)
+target_compile_options(binary_rpc_tests PRIVATE ${PROJECT_WARNING_FLAGS})
+gtest_discover_tests(binary_rpc_tests)
+
+if(UNIX AND NOT APPLE)
+    find_program(XVFB_RUN_EXECUTABLE xvfb-run)
+    if(XVFB_RUN_EXECUTABLE)
+        add_executable(binary_rpc_webview_tests test_binary_rpc_webview.cpp)
+        target_link_libraries(binary_rpc_webview_tests PRIVATE ${PROJECT_NAME}_lib GTest::gtest_main)
+        target_compile_options(binary_rpc_webview_tests PRIVATE ${PROJECT_WARNING_FLAGS})
+        add_test(NAME binary_rpc_webview
+            COMMAND ${XVFB_RUN_EXECUTABLE} -a $<TARGET_FILE:binary_rpc_webview_tests>)
+    endif()
+endif()
