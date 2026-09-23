@@ -43,3 +43,13 @@ if(UNIX AND NOT APPLE)
             COMMAND ${XVFB_RUN_EXECUTABLE} -a $<TARGET_FILE:binary_rpc_webview_tests>)
     endif()
 endif()
+
+# Exercise the actual WebView2/WKWebView request and response streams in CI.
+if(WIN32 OR APPLE)
+    add_executable(binary_rpc_platform_tests test_binary_rpc_platform.cpp)
+    target_link_libraries(binary_rpc_platform_tests PRIVATE
+        ${PROJECT_NAME}_lib GTest::gtest_main)
+    target_compile_options(binary_rpc_platform_tests PRIVATE ${PROJECT_WARNING_FLAGS})
+    add_test(NAME binary_rpc_platform COMMAND binary_rpc_platform_tests)
+    set_tests_properties(binary_rpc_platform PROPERTIES TIMEOUT 45)
+endif()

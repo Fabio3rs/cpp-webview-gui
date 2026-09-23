@@ -69,6 +69,8 @@ authorized WebView and rejects an explicitly foreign `Origin`.
 15 MiB request and response, typed struct calls, a one-shot binary event, and a
 second WebView in the same context. Run it with `ctest --test-dir build` on a machine
 with Xvfb. The JS wire tests run with `cd ui && npm run test:binary`.
+`tests/test_binary_rpc_platform.cpp` runs the same real `fetch` path on Windows
+and macOS in CI, including a 15 MiB round trip and an error envelope.
 For timing comparisons, build `bench_binary_rpc` with sanitizers disabled and
 run it under Xvfb. It reports small call latency and 1 MiB JSON/base64 versus
 binary round trips; results depend on the installed WebKit and machine.
