@@ -322,7 +322,7 @@ void load_html_with_binary_origin(webview::webview &window,
 }
 #endif
 } // namespace app::binary_rpc
-#else
+#elif !defined(_WIN32) && !defined(__APPLE__)
 namespace app::binary_rpc {
 bool install_transport(webview::webview &, Dispatcher) { return false; }
 void clear_transport(webview::webview &) {}

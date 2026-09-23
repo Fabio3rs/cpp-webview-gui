@@ -131,7 +131,7 @@ class Application {
     bool create_window() {
         try {
             // DevTools habilitado apenas em dev
-            window_ = std::make_unique<webview::webview>(dev_mode_, nullptr);
+            window_ = binary_rpc::create_webview(dev_mode_, nullptr);
             window_->set_title(config::WINDOW_TITLE);
 
             // Usa tamanho das opções CLI ou padrão do config
@@ -142,7 +142,7 @@ class Application {
             window_->set_size(width, height, WEBVIEW_HINT_NONE);
             window_->init("window.__APP_WINDOW_ID__ = \"main\";");
 
-#if defined(__linux__)
+#if defined(__linux__) || defined(_WIN32) || defined(__APPLE__)
             binary_rpc::Dispatcher binary_rpc;
             constexpr std::uint32_t echo_method_id = 5;
             constexpr std::uint32_t add_method_id = 6;
@@ -170,7 +170,7 @@ class Application {
                 [this](webview::webview &w) { setup_bindings(w); });
             std::string_view trusted_navigation_url = dev_url_;
             if (!dev_mode_) {
-#if defined(__linux__)
+#if defined(__linux__) || defined(_WIN32) || defined(__APPLE__)
                 trusted_navigation_url = binary_rpc::rpc_base;
 #else
                 trusted_navigation_url = {};
@@ -180,7 +180,7 @@ class Application {
                 !install_navigation_guard(*window_, trusted_navigation_url)) {
                 throw std::runtime_error("Failed to guard privileged navigation");
             }
-#if defined(__linux__)
+#if defined(__linux__) || defined(_WIN32) || defined(__APPLE__)
             if (dev_mode_) {
                 setup_bindings(*window_);
             } else if (should_install_bindings(options_.url)) {
@@ -230,7 +230,8 @@ class Application {
 #elif defined(APP_NO_EMBEDDED_UI)
             std::cout << "[APP] UI embutida indisponível, usando HTML vazio."
                       << std::endl;
-            window_->set_html("<!doctype html><html><body></body></html>");
+            binary_rpc::load_html_with_binary_origin(
+                *window_, "<!doctype html><html><body></body></html>");
 #else
             std::cout << "[APP] Carregando HTML embutido..." << std::endl;
             binary_rpc::load_html_with_binary_origin(*window_, INDEX_HTML);

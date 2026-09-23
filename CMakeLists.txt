@@ -357,16 +357,19 @@ target_compile_features(cli_parser INTERFACE cxx_std_20)
 file(GLOB_RECURSE LIB_SOURCES "${CMAKE_SOURCE_DIR}/src/*.cpp")
 list(FILTER LIB_SOURCES EXCLUDE REGEX ".*main\\.cpp$")
 list(FILTER LIB_SOURCES EXCLUDE REGEX ".*navigation_guard_win32\\.cpp$")
+list(FILTER LIB_SOURCES EXCLUDE REGEX ".*binary_rpc_transport_win32\\.cpp$")
 
 # Cria a biblioteca estática
 add_library(${PROJECT_NAME}_lib STATIC ${LIB_SOURCES})
 
 if(APPLE)
     target_sources(${PROJECT_NAME}_lib PRIVATE
-        src/app/navigation_guard_macos.mm)
+        src/app/navigation_guard_macos.mm
+        src/app/binary_rpc_transport_macos.mm)
 elseif(WIN32)
     target_sources(${PROJECT_NAME}_lib PRIVATE
-        src/app/navigation_guard_win32.cpp)
+        src/app/navigation_guard_win32.cpp
+        src/app/binary_rpc_transport_win32.cpp)
 endif()
 
 if(WIN32)

@@ -13,9 +13,10 @@ C++ desktop application using webview for cross-platform GUI, Vue 3 for the fron
 
 ## Binary RPC prototype
 
-Production builds on Linux with WebKitGTK 2.40+ expose an in-process binary
-endpoint at `app-rpc://native/<method-id>`. The embedded page is loaded with
-that origin, then calls `fetch()` with a `Uint8Array` request body and reads an
+Production builds expose an in-process binary endpoint: WebKitGTK and
+WKWebView use `app-rpc://native/<method-id>`, while WebView2 intercepts
+`https://cpp-webview-gui.invalid/rpc/<method-id>`. The embedded page is loaded
+from the same origin, then calls `fetch()` with a `Uint8Array` request body and reads an
 `ArrayBuffer` response. All named application bindings use typed
 `WireCodec<T>` values end to end; their IDs are derived from their names.
 Window settings, results, and errors have fixed wire layouts. Variable
@@ -31,17 +32,18 @@ and a length-prefixed UTF-8 error message. HTTP errors are reserved for
 transport failures. The page receives the endpoint through
 `window.__APP_BINARY_RPC__.endpoint` instead of a hardcoded JS URL.
 
-The scheme is registered once per WebKit context. Embedded secondary windows
-sharing that context load with the binary origin and use the same dispatcher;
-windows on another context retain the legacy bridge. On Linux production pages,
-native events are queued as bytes and the page fetches each event after a small
+On Linux, the scheme is registered once per WebKit context. On macOS, the
+scheme handler is configured before each WKWebView is constructed. Windows
+installs a WebResourceRequested handler in each privileged WebView. Embedded
+secondary windows share the dispatcher. Native events are queued as bytes and
+the page fetches each event after a small
 JavaScript notification containing only its numeric token. When the binary
 transport is ready, those pages remove the unused legacy JSON bindings and
 install their typed JS functions directly.
 
-This is a Linux production path. Vite pages have a different origin and remain
-on the existing JSON bridge in development; macOS and Windows still use the
-existing JSON bindings. Native-generated control events are still assembled
+Vite pages have a different origin and remain on the existing JSON bridge in
+development. The Windows and macOS transports still require runtime validation
+on those platforms; Linux has a real WebKitGTK integration test. Native-generated control events are still assembled
 with `nlohmann::json` before being encoded as CBOR; a full event queue also has
 a textual fallback. The two standalone example method IDs for byte
 echo and integer addition remain manually assigned. The JS list of named
@@ -53,8 +55,8 @@ including in development. A development window is privileged only when it
 loads the configured Vite origin. Auxiliary windows receive bindings only when
 their initial URL has the trusted origin, or when they load the embedded page.
 Privileged WebViews block navigation to other origins before the new document
-loads. On Windows and macOS, production's embedded document has no application
-URL, so only its initial blank load is allowed. New window actions outside the
+loads. Production pages on all three platforms now use the internal application
+origin. New window actions outside the
 application's native window API are blocked. User-clicked external HTTP(S)
 links open in the system browser on Linux and macOS. WebView2 exposes a user
 gesture flag for new windows, which allows those external HTTP(S) targets to

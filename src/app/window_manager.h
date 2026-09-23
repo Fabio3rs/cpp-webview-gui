@@ -429,7 +429,8 @@ class WindowManager {
 #if defined(APP_DEV_MODE)
         throw std::runtime_error("Dev build without Vite server URL");
 #elif defined(APP_NO_EMBEDDED_UI)
-        window.set_html("<!doctype html><html><body></body></html>");
+        binary_rpc::load_html_with_binary_origin(
+            window, "<!doctype html><html><body></body></html>");
 #else
         if (binary_ready) {
             binary_rpc::load_html_with_binary_origin(window, INDEX_HTML);
@@ -472,8 +473,7 @@ class WindowManager {
             resolve_window_config(bootstrap_snapshot, window_id);
 
         try {
-            auto window =
-                std::make_unique<webview::webview>(dev_mode_, nullptr);
+            auto window = binary_rpc::create_webview(dev_mode_, nullptr);
             window->set_title(cfg.title);
             window->set_size(cfg.width, cfg.height, WEBVIEW_HINT_NONE);
             apply_window_position(*window, cfg);
@@ -497,7 +497,7 @@ class WindowManager {
             }
             std::string_view trusted_navigation_url = dev_url_;
             if (!dev_mode_) {
-#if defined(__linux__)
+#if defined(__linux__) || defined(_WIN32) || defined(__APPLE__)
                 trusted_navigation_url = binary_rpc::rpc_base;
 #else
                 trusted_navigation_url = {};
