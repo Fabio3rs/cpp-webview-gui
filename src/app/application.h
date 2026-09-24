@@ -152,20 +152,6 @@ class Application {
 
 #if defined(__linux__) || defined(_WIN32) || defined(__APPLE__)
             binary_rpc::Dispatcher binary_rpc;
-            constexpr std::uint32_t echo_method_id = 5;
-            constexpr std::uint32_t add_method_id = 6;
-            binary_rpc.bind(echo_method_id,
-                            [](auto &in, auto &out) { out.bytes(in.bytes()); });
-            binary_rpc.bind(add_method_id, [](auto &in, auto &out) {
-                const auto left = in.i32();
-                const auto right = in.i32();
-                const auto sum = static_cast<std::int64_t>(left) + right;
-                if (sum < (std::numeric_limits<std::int32_t>::min)() ||
-                    sum > (std::numeric_limits<std::int32_t>::max)()) {
-                    throw binary_rpc::WireError("Integer overflow");
-                }
-                out.i32(static_cast<std::int32_t>(sum));
-            });
 #endif
 
             // Setup window manager and bindings

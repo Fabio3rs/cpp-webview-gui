@@ -11,6 +11,8 @@ declare global {
   function getStatus(): Promise<NativeBindingResult<string>>;
   function isReady(): Promise<NativeBindingResult<boolean>>;
   function getConfig(): Promise<NativeBindingResult<{ theme: string; lang: string }>>;
+  function echoBytes(arg0: Uint8Array): Promise<NativeBindingResult<Uint8Array>>;
+  function addI32(arg0: number, arg1: number): Promise<NativeBindingResult<number>>;
   function createNativeWindow(arg0: { [key: string]: unknown; windowId?: string; title?: string; url?: string; width?: number; height?: number; left?: number; top?: number }): Promise<NativeBindingResult<string>>;
   function getBootstrap(arg0: string): Promise<NativeBindingResult<{ [key: string]: unknown; windowId?: string; title?: string; url?: string; width?: number; height?: number; left?: number; top?: number }>>;
   function postNativeEvent(arg0: string, arg1: unknown): Promise<NativeBindingResult<Record<string, never>>>;

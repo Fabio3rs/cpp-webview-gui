@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { WireReader, WireWriter, echoBytesBinary, getCounterBinary, methodId, installBinaryBindings, installBinaryEventReceiver } from '../src/binary_rpc.js'
+import { WireReader, WireWriter, methodId, installBinaryBindings, installBinaryEventReceiver } from '../src/binary_rpc.js'
 import { decodeCbor, encodeCbor } from '../src/cbor.js'
 import { readBootstrap, readNativeEvent, readOpaque, readOutsideDrop, readWindowList, writeBootstrap, writeOpaque } from '../src/native_wire_types.js'
 import { nativeBindingNames, nativeBindings } from '../src/generated/native-bindings.js'
@@ -143,12 +143,12 @@ test('binary response rejects unknown status and trailing error bytes', async ()
     try {
         globalThis.window = { __APP_BINARY_RPC__: rpcConfig }
         globalThis.fetch = async () => new Response(Uint8Array.of(2))
-        await assert.rejects(getCounterBinary(), /Invalid binary response status/)
+        await assert.rejects(nativeBindings.getCounter(), /Invalid binary response status/)
         globalThis.fetch = async () => {
             const error = new WireWriter().u8(1).u32(400).string('bad').u8(7)
             return new Response(error.finish())
         }
-        await assert.rejects(getCounterBinary(), /Trailing binary response bytes/)
+        await assert.rejects(nativeBindings.getCounter(), /Trailing binary response bytes/)
     } finally {
         globalThis.fetch = originalFetch
         globalThis.window = originalWindow
@@ -166,7 +166,7 @@ test('binary endpoint comes from the page configuration', async () => {
             assert.equal(url, `https://app.invalid/rpc/${methodId('getCounter')}`)
             return successResponse(new WireWriter().i32(42).finish())
         }
-        assert.equal(await getCounterBinary(), 42)
+        assert.equal(await nativeBindings.getCounter(), 42)
     } finally {
         globalThis.fetch = originalFetch
         globalThis.window = originalWindow
@@ -316,7 +316,7 @@ test('typed call posts bytes and decodes native response', async () => {
             assert.equal(options.body.byteLength, 0)
             return successResponse(new WireWriter().i32(42).finish())
         }
-        assert.equal(await getCounterBinary(), 42)
+        assert.equal(await nativeBindings.getCounter(), 42)
     } finally {
         globalThis.fetch = originalFetch
         globalThis.window = originalWindow
@@ -330,13 +330,33 @@ test('binary payload retains its bytes', async () => {
         globalThis.window = { __APP_BINARY_RPC__: rpcConfig }
         const source = new Uint8Array([0, 255, 17, 42])
         globalThis.fetch = async (url, options) => {
-            assert.equal(url, 'app-rpc://native/5')
+            assert.equal(url, `app-rpc://native/${methodId('echoBytes')}`)
             const input = new WireReader(options.body)
             assert.deepEqual(input.bytes(), source)
             input.finish()
             return successResponse(new WireWriter().bytes(source).finish())
         }
-        assert.deepEqual(await echoBytesBinary(source), source)
+        assert.deepEqual(await nativeBindings.echoBytes(source), source)
+    } finally {
+        globalThis.fetch = originalFetch
+        globalThis.window = originalWindow
+    }
+})
+
+test('generated integer addition uses its name-derived method ID', async () => {
+    const originalFetch = globalThis.fetch
+    const originalWindow = globalThis.window
+    try {
+        globalThis.window = { __APP_BINARY_RPC__: rpcConfig }
+        globalThis.fetch = async (url, options) => {
+            assert.equal(url, `app-rpc://native/${methodId('addI32')}`)
+            const input = new WireReader(options.body)
+            assert.equal(input.i32(), 20)
+            assert.equal(input.i32(), 22)
+            input.finish()
+            return successResponse(new WireWriter().i32(42).finish())
+        }
+        assert.equal(await nativeBindings.addI32(20, 22), 42)
     } finally {
         globalThis.fetch = originalFetch
         globalThis.window = originalWindow

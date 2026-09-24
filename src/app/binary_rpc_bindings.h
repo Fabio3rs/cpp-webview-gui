@@ -13,7 +13,7 @@
 namespace app::binary_rpc {
 
 // FNV-1a over UTF-8 binding names. Collision detection happens in Dispatcher.
-[[nodiscard]] inline std::uint32_t method_id(std::string_view name) {
+[[nodiscard]] constexpr std::uint32_t method_id(std::string_view name) {
     constexpr std::uint32_t offset = 2166136261U;
     constexpr std::uint32_t prime = 16777619U;
     std::uint32_t hash = offset;

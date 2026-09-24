@@ -3,10 +3,12 @@ import { callTyped, installBinaryBindings, readWireBool } from '../binary_rpc.js
 import { readBootstrap, readOpaque, readOutsideDrop, writeBootstrap, writeOpaque } from '../native_wire_types.js'
 
 export const nativeBindings = {
+    "addI32": (arg0, arg1) => callTyped(716611498, request => {request.i32(arg0);request.i32(arg1);}, response => response.i32()),
     "closeNativeWindow": (arg0) => callTyped(1192325916, request => {request.string(arg0);}, response => ({})),
     "completeNativeDrag": (arg0) => callTyped(3529071915, request => {request.string(arg0);}, response => response.optional(input => readOpaque(input))),
     "completeNativeDragOutside": (arg0) => callTyped(109243974, request => {request.string(arg0);}, response => response.optional(input => readOutsideDrop(input))),
     "createNativeWindow": (arg0) => callTyped(763889838, request => {writeBootstrap(request, arg0);}, response => response.string()),
+    "echoBytes": (arg0) => callTyped(3547344679, request => {request.bytes(arg0);}, response => response.bytes()),
     "getBootstrap": (arg0) => callTyped(590117627, request => {request.string(arg0);}, response => readBootstrap(response)),
     "getConfig": () => callTyped(3706394581, request => {}, response => ({"theme":response.string(),"lang":response.string(),})),
     "getCounter": () => callTyped(2589869369, request => {}, response => response.i32()),

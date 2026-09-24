@@ -7,6 +7,7 @@
 #include "app/window_manager.h"
 #include <glib.h>
 
+#include <limits>
 #include <string>
 
 TEST(BinaryBindings, WireBindingCallsTypedHandlerWithoutJson) {
@@ -21,6 +22,45 @@ TEST(BinaryBindings, WireBindingCallsTypedHandlerWithoutJson) {
     app::binary_rpc::Reader reader(response);
     EXPECT_EQ(reader.i32(), 42);
     EXPECT_NO_THROW(reader.finish());
+}
+
+TEST(BinaryBindings, ExampleMethodsShareTheGeneratedNameBasedIds) {
+    app::binary_rpc::Dispatcher dispatcher;
+    app::HandlerRegistry handlers;
+    app::setup(nullptr, handlers, &dispatcher);
+
+    app::binary_rpc::Writer addition;
+    addition.i32(20);
+    addition.i32(22);
+    const auto sum = dispatcher.call(app::binary_rpc::method_id("addI32"),
+                                     std::move(addition).take());
+    app::binary_rpc::Reader sum_reader(sum);
+    EXPECT_EQ(sum_reader.i32(), 42);
+    EXPECT_NO_THROW(sum_reader.finish());
+
+    const app::binary_rpc::Bytes payload{0, 255, 17, 42};
+    app::binary_rpc::Writer echo;
+    echo.bytes(payload);
+    const auto echoed = dispatcher.call(app::binary_rpc::method_id("echoBytes"),
+                                        std::move(echo).take());
+    app::binary_rpc::Reader echo_reader(echoed);
+    const auto bytes = echo_reader.bytes();
+    EXPECT_EQ(app::binary_rpc::Bytes(bytes.begin(), bytes.end()), payload);
+    EXPECT_NO_THROW(echo_reader.finish());
+}
+
+TEST(BinaryBindings, AdditionRejectsOverflow) {
+    app::binary_rpc::Dispatcher dispatcher;
+    app::HandlerRegistry handlers;
+    app::setup(nullptr, handlers, &dispatcher);
+
+    app::binary_rpc::Writer request;
+    request.i32((std::numeric_limits<std::int32_t>::max)());
+    request.i32(1);
+    EXPECT_THROW(
+        static_cast<void>(dispatcher.call(app::binary_rpc::method_id("addI32"),
+                                          std::move(request).take())),
+        app::binary_rpc::WireError);
 }
 
 TEST(BinaryBindings, PingWireKeepsTheLegacyResponseShape) {

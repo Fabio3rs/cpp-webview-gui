@@ -22,7 +22,7 @@ from the same origin, then calls `fetch()` with a `Uint8Array` request body and 
 Window settings, results, and errors have fixed wire layouts. Variable
 Dockview state and arbitrary event payloads are carried as opaque CBOR bytes:
 the native RPC handlers store or forward them without constructing a JSON DOM.
-A separate `echoBytesBinary` example carries raw bytes without JSON or base64.
+The generated `echoBytes` example carries raw bytes without JSON or base64.
 The transport accepts
 at most 16 MiB per message. Direct typed calls use little-endian integers and
 a 32-bit byte length for strings and byte arrays. The C++ and JS codecs also
@@ -51,9 +51,9 @@ variables. The ports must differ.
 Production startup fails if binary transport cannot be installed;
 the event queue does not fall back to textual payloads when full. Real
 WebView integration tests exercise binary requests on Linux, Windows, and macOS.
-The two standalone example method IDs for byte echo and integer addition
-remain manually assigned. Named bindings use IDs derived from their names;
-the build generates their JavaScript wrappers, names, and TypeScript declarations
+All method IDs, including the byte echo and integer addition examples, are
+derived from binding names. The build generates their JavaScript wrappers,
+names, and TypeScript declarations
 from the C++ binding registry. Dispatcher registration checks ID collisions.
 Pages loaded from a caller-supplied `--url` do not receive native bindings,
 including in development. A development window is privileged only when it
@@ -288,8 +288,9 @@ Benefits:
 
 ### Adding JS ↔ C++ Bindings
 
-Register a typed method in `src/app/handlers.h` (or in the application's
-`setup_bindings()` function). Primitives and strings already have wire codecs:
+Register a typed method in `src/app/handlers.h` and keep it reachable from
+`register_app_bindings()` in `src/app/app_bindings.h`. Primitives and strings
+already have wire codecs:
 
 ```cpp
 APP_BIND_TYPED_WIRE(w, binary, "greet", [](const std::string &name) {
@@ -299,7 +300,10 @@ APP_BIND_TYPED_WIRE(w, binary, "greet", [](const std::string &name) {
 
 Building the C++ project generates `ui/src/generated/native-bindings.js` and
 `native-bindings.d.ts`. No JavaScript method list or per-method wrapper needs
-editing. For a simple aggregate DTO, declare its ordered fields once:
+editing. Runtime registration and the emitter derive the same 32-bit ID from
+the binding name; renaming a binding changes that ID. Collisions fail during
+generation and runtime registration. For a simple aggregate DTO, declare its
+ordered fields once:
 
 ```cpp
 struct Greeting { std::string message; };

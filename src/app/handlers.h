@@ -7,6 +7,8 @@
 #include "app/config.h"
 #include "app/handler_types.h"
 #include "app/native_types.h"
+#include <cstdint>
+#include <limits>
 
 namespace app {
 
@@ -90,6 +92,21 @@ inline void setup(webview::webview *w, const HandlerRegistry &handlers,
 
     APP_BIND_TYPED_WIRE(w, binary, "getConfig",
                         ([]() { return ConfigInfo{"dark", "pt-br"}; }));
+
+    // Example bulk payload and checked arithmetic use the same generated
+    // contract as every other application binding.
+    APP_BIND_TYPED_WIRE(w, binary, "echoBytes",
+                        [](const binary_rpc::Bytes &bytes) { return bytes; });
+    APP_BIND_TYPED_WIRE(
+        w, binary, "addI32", [](std::int32_t left, std::int32_t right) {
+            const auto sum = static_cast<std::int64_t>(left) +
+                             static_cast<std::int64_t>(right);
+            if (sum < (std::numeric_limits<std::int32_t>::min)() ||
+                sum > (std::numeric_limits<std::int32_t>::max)()) {
+                throw binary_rpc::WireError("Integer overflow");
+            }
+            return static_cast<std::int32_t>(sum);
+        });
 }
 
 inline void setup(webview::webview &w, const HandlerRegistry &handlers,

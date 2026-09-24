@@ -1,4 +1,16 @@
 {
+  "addI32": {
+    "begin": {
+      "column": 10,
+      "file": "../src/app/handlers.h",
+      "line": 109
+    },
+    "end": {
+      "column": 10,
+      "file": "../src/app/handlers.h",
+      "line": 109
+    }
+  },
   "closeNativeWindow": {
     "begin": {
       "column": 26,
@@ -47,6 +59,18 @@
       "line": 15
     }
   },
+  "echoBytes": {
+    "begin": {
+      "column": 77,
+      "file": "../src/app/handlers.h",
+      "line": 99
+    },
+    "end": {
+      "column": 77,
+      "file": "../src/app/handlers.h",
+      "line": 99
+    }
+  },
   "getBootstrap": {
     "begin": {
       "column": 26,
@@ -63,72 +87,72 @@
     "begin": {
       "column": 71,
       "file": "../src/app/handlers.h",
-      "line": 92
+      "line": 94
     },
     "end": {
       "column": 71,
       "file": "../src/app/handlers.h",
-      "line": 92
+      "line": 94
     }
   },
   "getCounter": {
     "begin": {
       "column": 69,
       "file": "../src/app/handlers.h",
-      "line": 82
+      "line": 84
     },
     "end": {
       "column": 69,
       "file": "../src/app/handlers.h",
-      "line": 82
+      "line": 84
     }
   },
   "getPi": {
     "begin": {
       "column": 6,
       "file": "../src/app/handlers.h",
-      "line": 86
+      "line": 88
     },
     "end": {
       "column": 6,
       "file": "../src/app/handlers.h",
-      "line": 86
+      "line": 88
     }
   },
   "getStatus": {
     "begin": {
       "column": 63,
       "file": "../src/app/handlers.h",
-      "line": 88
+      "line": 90
     },
     "end": {
       "column": 63,
       "file": "../src/app/handlers.h",
-      "line": 88
+      "line": 90
     }
   },
   "getVersion": {
     "begin": {
       "column": 73,
       "file": "../src/app/handlers.h",
-      "line": 76
+      "line": 78
     },
     "end": {
       "column": 73,
       "file": "../src/app/handlers.h",
-      "line": 76
+      "line": 78
     }
   },
   "isReady": {
     "begin": {
       "column": 68,
       "file": "../src/app/handlers.h",
-      "line": 89
+      "line": 91
     },
     "end": {
       "column": 68,
       "file": "../src/app/handlers.h",
-      "line": 89
+      "line": 91
     }
   },
   "listNativeWindows": {
@@ -147,24 +171,24 @@
     "begin": {
       "column": 26,
       "file": "../src/app/handlers.h",
-      "line": 80
+      "line": 82
     },
     "end": {
       "column": 26,
       "file": "../src/app/handlers.h",
-      "line": 80
+      "line": 82
     }
   },
   "ping": {
     "begin": {
       "column": 26,
       "file": "../src/app/handlers.h",
-      "line": 74
+      "line": 76
     },
     "end": {
       "column": 26,
       "file": "../src/app/handlers.h",
-      "line": 74
+      "line": 76
     }
   },
   "postNativeEvent": {
