@@ -35,17 +35,17 @@ transport failures. The page receives the endpoint through
 On Linux, the scheme is registered once per WebKit context. On macOS, the
 scheme handler is configured before each WKWebView is constructed. Windows
 installs a WebResourceRequested handler in each privileged WebView. Embedded
-secondary windows share the dispatcher. Native events are queued as bytes and
-the page fetches each event after a small
-JavaScript notification containing only its numeric token. When the binary
-transport is ready, those pages remove the unused legacy JSON bindings and
-install their typed JS functions directly.
+secondary windows share the dispatcher. Native events use fixed binary tags
+for window and drag control messages; arbitrary forwarded JS payloads remain
+opaque CBOR. The page fetches each event after a small JavaScript notification
+containing only its numeric token. Production pages register binary handlers
+directly and install their typed JS functions without registering JSON bindings.
 
 Vite pages have a different origin and remain on the existing JSON bridge in
-development. The Windows and macOS transports still require runtime validation
-on those platforms; Linux has a real WebKitGTK integration test. Native-generated control events are still assembled
-with `nlohmann::json` before being encoded as CBOR; a full event queue also has
-a textual fallback. The two standalone example method IDs for byte
+development. Production startup fails if binary transport cannot be installed;
+the event queue does not fall back to textual payloads when full. Real
+WebView integration tests exercise binary requests on Linux, Windows, and macOS.
+The two standalone example method IDs for byte
 echo and integer addition remain manually assigned. The JS list of named
 bindings is still maintained separately from C++ metadata; its test detects
 drift. Named IDs are derived from binding names and checked for collisions at
@@ -69,8 +69,9 @@ authorized WebView and rejects an explicitly foreign `Origin`.
 15 MiB request and response, typed struct calls, a one-shot binary event, and a
 second WebView in the same context. Run it with `ctest --test-dir build` on a machine
 with Xvfb. The JS wire tests run with `cd ui && npm run test:binary`.
-`tests/test_binary_rpc_platform.cpp` runs the same real `fetch` path on Windows
-and macOS in CI, including a 15 MiB round trip and an error envelope.
+`tests/test_binary_rpc_platform.cpp` runs the same real `fetch` path on Linux,
+Windows, and macOS, including a 15 MiB round trip, an error envelope, and a
+typed native event.
 For timing comparisons, build `bench_binary_rpc` with sanitizers disabled and
 run it under Xvfb. It reports small call latency and 1 MiB JSON/base64 versus
 binary round trips; results depend on the installed WebKit and machine.

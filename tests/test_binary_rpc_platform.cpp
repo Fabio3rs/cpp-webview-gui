@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "app/binary_rpc_transport.h"
+#include "app/native_event.h"
 #include "app/navigation_guard.h"
 
 #include <chrono>
@@ -27,6 +28,15 @@ TEST(BinaryRpcPlatform, TransfersBytesThroughRealWebView) {
     window->bind("report", [&result, &window](const std::string &value) {
         result = value;
         window->terminate();
+        return std::string("null");
+    });
+    window->bind("readyEvent", [&result, &window](const std::string &) {
+        auto event = app::encode_native_event(
+            app::NativeEvent::window_closed("w1"));
+        if (!app::binary_rpc::post_event_bytes(*window, event)) {
+            result = "event queue failed";
+            window->terminate();
+        }
         return std::string("null");
     });
 
@@ -76,6 +86,23 @@ TEST(BinaryRpcPlatform, TransfersBytesThroughRealWebView) {
           if (!unknown.ok ||
               new Uint8Array(await unknown.arrayBuffer())[0] !== 1)
             throw new Error('missing error envelope');
+          await new Promise((resolve, reject) => {
+            window.__APP_NATIVE_EVENT__ = async token => {
+              try {
+                const event = await fetch(rpcBase + 'event/' + token);
+                const bytes = await event.arrayBuffer();
+                const view = new DataView(bytes);
+                const length = view.getUint32(1, true);
+                const id = new TextDecoder().decode(
+                  new Uint8Array(bytes, 5, length));
+                if (!event.ok || view.getUint8(0) !== 1 || id !== 'w1' ||
+                    bytes.byteLength !== length + 5)
+                  throw new Error('wrong typed native event');
+                resolve();
+              } catch (error) { reject(error); }
+            };
+            readyEvent().catch(reject);
+          });
           report('ok');
         })().catch(error => report(String(error)));
         </script>)html";

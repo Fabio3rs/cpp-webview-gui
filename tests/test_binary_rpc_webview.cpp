@@ -9,44 +9,15 @@
 
 #include <string>
 
-TEST(BinaryBindings, CborDispatchesExistingTypedHandler) {
-    app::binary_rpc::Dispatcher dispatcher;
-    app::binary_rpc::bind_cbor(
-        dispatcher, "greet", [](const std::string &name) {
-            return app::bindings::json{{"message", "Olá, " + name}};
-        });
-    const auto args = app::bindings::json::array({"Fabio"});
-    const auto request = app::bindings::json::to_cbor(args);
-    const auto response =
-        dispatcher.call(app::binary_rpc::method_id("greet"), request);
-    const auto decoded = app::bindings::json::from_cbor(response);
-    EXPECT_TRUE(decoded.at("ok").get<bool>());
-    EXPECT_EQ(decoded.at("data").at("message"), "Olá, Fabio");
-}
-
-TEST(BinaryBindings, CborPreservesBindingErrors) {
-    app::binary_rpc::Dispatcher dispatcher;
-    app::binary_rpc::bind_cbor(dispatcher, "needsNumber",
-                               [](int value) { return value; });
-    const auto args = app::bindings::json::array({"wrong"});
-    const auto response =
-        dispatcher.call(app::binary_rpc::method_id("needsNumber"),
-                        app::bindings::json::to_cbor(args));
-    const auto decoded = app::bindings::json::from_cbor(response);
-    EXPECT_FALSE(decoded.at("ok").get<bool>());
-    EXPECT_EQ(decoded.at("error").at("code"), 400);
-}
-
 TEST(BinaryBindings, WireBindingCallsTypedHandlerWithoutJson) {
     app::binary_rpc::Dispatcher dispatcher;
-    app::binary_rpc::bind_wire(dispatcher, "add", [](int left, int right) {
-        return left + right;
-    });
+    app::binary_rpc::bind_wire(
+        dispatcher, "add", [](int left, int right) { return left + right; });
     app::binary_rpc::Writer request;
     request.i32(20);
     request.i32(22);
-    const auto response = dispatcher.call(
-        app::binary_rpc::method_id("add"), std::move(request).take());
+    const auto response = dispatcher.call(app::binary_rpc::method_id("add"),
+                                          std::move(request).take());
     app::binary_rpc::Reader reader(response);
     EXPECT_EQ(reader.i32(), 42);
     EXPECT_NO_THROW(reader.finish());
@@ -55,17 +26,18 @@ TEST(BinaryBindings, WireBindingCallsTypedHandlerWithoutJson) {
 TEST(BinaryBindings, PingWireKeepsTheLegacyResponseShape) {
     app::binary_rpc::Dispatcher dispatcher;
     app::HandlerRegistry handlers;
-    app::binary_rpc::bind_wire(
-        dispatcher, "ping", [&handlers](std::optional<std::string> message) {
-            return handlers.ping(message);
-        });
+    app::binary_rpc::bind_wire(dispatcher, "ping",
+                               [&handlers](std::optional<std::string> message) {
+                                   return handlers.ping(message);
+                               });
     app::binary_rpc::Writer request;
     app::binary_rpc::WireCodec<std::optional<std::string>>::write(request,
-                                                                 "hello");
-    const auto response = dispatcher.call(
-        app::binary_rpc::method_id("ping"), std::move(request).take());
+                                                                  "hello");
+    const auto response = dispatcher.call(app::binary_rpc::method_id("ping"),
+                                          std::move(request).take());
     app::binary_rpc::Reader reader(response);
-    const auto value = app::binary_rpc::WireCodec<app::PingResult>::read(reader);
+    const auto value =
+        app::binary_rpc::WireCodec<app::PingResult>::read(reader);
     EXPECT_EQ(value.message, "pong");
     EXPECT_EQ(value.echo, "hello");
     EXPECT_NO_THROW(reader.finish());
@@ -79,9 +51,11 @@ TEST(BinaryBindings, BootstrapPreservesTypedSettingsAndOpaqueUiState) {
         {"width", 840},
         {"left", 17},
         {"kind", "dockview"},
-        {"panels", {{{"component", "InspectorPanel"},
-                     {"params", {{"nested", {1, true}}}}}}}};
-    auto value = app::bindings::JsConv<app::WindowBootstrap>::from_json(original);
+        {"panels",
+         {{{"component", "InspectorPanel"},
+           {"params", {{"nested", {1, true}}}}}}}};
+    auto value =
+        app::bindings::JsConv<app::WindowBootstrap>::from_json(original);
     ASSERT_EQ(value.title, "Inspector");
     ASSERT_EQ(value.width, 840.0);
     app::binary_rpc::Writer writer;
@@ -99,10 +73,10 @@ TEST(BinaryBindings, WindowAndDragResultsUseTypedWireValues) {
     app::binary_rpc::Dispatcher dispatcher;
     app::binary_rpc::bind_wire(dispatcher, "listNativeWindows", []() {
         return std::vector<app::NativeWindowInfo>{{"main", "Main"},
-                                                   {"w1", "Inspector"}};
+                                                  {"w1", "Inspector"}};
     });
-    const auto bytes = dispatcher.call(
-        app::binary_rpc::method_id("listNativeWindows"), {});
+    const auto bytes =
+        dispatcher.call(app::binary_rpc::method_id("listNativeWindows"), {});
     app::binary_rpc::Reader reader(bytes);
     const auto windows =
         app::binary_rpc::WireCodec<std::vector<app::NativeWindowInfo>>::read(
@@ -116,12 +90,13 @@ TEST(BinaryBindings, WindowAndDragResultsUseTypedWireValues) {
             {{"panels", {{{"id", "one"}}}}}),
         app::DropPoint{12.5, 7.5}};
     app::binary_rpc::Writer output;
-    app::binary_rpc::WireCodec<std::optional<app::OutsideDrop>>::write(
-        output, result);
+    app::binary_rpc::WireCodec<std::optional<app::OutsideDrop>>::write(output,
+                                                                       result);
     const auto encoded = std::move(output).take();
     app::binary_rpc::Reader reply(encoded);
     const auto decoded =
-        app::binary_rpc::WireCodec<std::optional<app::OutsideDrop>>::read(reply);
+        app::binary_rpc::WireCodec<std::optional<app::OutsideDrop>>::read(
+            reply);
     ASSERT_TRUE(decoded.has_value());
     EXPECT_EQ(app::bindings::JsConv<app::OutsideDrop>::to_json(*decoded),
               app::bindings::JsConv<app::OutsideDrop>::to_json(result));
@@ -133,9 +108,6 @@ TEST(BinaryWebview, FetchTransfersTypedBytes) {
     dispatcher.bind(7,
                     [](auto &in, auto &out) { out.i32(in.i32() + in.i32()); });
     dispatcher.bind(8, [](auto &in, auto &out) { out.bytes(in.bytes()); });
-    app::binary_rpc::bind_cbor(dispatcher, "sumCbor", [](int left, int right) {
-        return left + right;
-    });
 
     webview::webview window(false, nullptr);
     app::HandlerRegistry handlers;
@@ -143,9 +115,8 @@ TEST(BinaryWebview, FetchTransfersTypedBytes) {
     if (!app::binary_rpc::install_transport(window, dispatcher)) {
         GTEST_SKIP() << "WebKitGTK before 2.40 has no binary POST body API";
     }
-    ASSERT_TRUE(app::install_navigation_guard(
-        window, "app-rpc://native/index.html"));
-    app::bindings::remove_legacy_bindings(window);
+    ASSERT_TRUE(
+        app::install_navigation_guard(window, "app-rpc://native/index.html"));
 
     std::string result = "timeout";
     window.bind("report", [&window, &result](const std::string &value) {
@@ -193,24 +164,6 @@ TEST(BinaryWebview, FetchTransfersTypedBytes) {
             echoed.length !== large.length + 1 ||
             !echoed.subarray(5).every(byte => byte === 0xab)) {
           throw new Error('wrong payload');
-        }
-        let hash = 2166136261;
-        for (const byte of new TextEncoder().encode('sumCbor')) {
-          hash = Math.imul(hash ^ byte, 16777619) >>> 0;
-        }
-        const cbor = await fetch(`app-rpc://native/${hash}`, {
-          method: 'POST',
-          body: Uint8Array.of(0x82, 0x14, 0x16),
-          headers: {'Content-Type': 'application/octet-stream'}
-        });
-        if (!cbor.ok) throw new Error('CBOR HTTP ' + cbor.status);
-        const actual = new Uint8Array(await cbor.arrayBuffer()).subarray(1);
-        const expected = Uint8Array.of(
-          0xa2, 0x64, 0x64, 0x61, 0x74, 0x61, 0x18, 0x2a,
-          0x62, 0x6f, 0x6b, 0xf5);
-        if (actual.length !== expected.length ||
-            !actual.every((byte, index) => byte === expected[index])) {
-          throw new Error('wrong CBOR');
         }
         const hashName = name => {
           let hash = 2166136261;
@@ -292,8 +245,8 @@ TEST(BinaryWebview, SecondWindowSharesBinaryTransport) {
     webview::webview child(false, nullptr);
     ASSERT_TRUE(app::binary_rpc::shares_transport_context(main, child));
     app::binary_rpc::authorize_view(child);
-    ASSERT_TRUE(app::install_navigation_guard(
-        child, "app-rpc://native/index.html"));
+    ASSERT_TRUE(
+        app::install_navigation_guard(child, "app-rpc://native/index.html"));
 
     std::string result = "timeout";
     child.bind("reportChild", [&main, &result](const std::string &value) {
@@ -331,8 +284,8 @@ TEST(BinaryWebview, NativeEventUsesBinaryScheme) {
     if (!app::binary_rpc::install_transport(window, {})) {
         GTEST_SKIP() << "WebKitGTK before 2.40 has no binary scheme support";
     }
-    ASSERT_TRUE(app::install_navigation_guard(
-        window, "app-rpc://native/index.html"));
+    ASSERT_TRUE(
+        app::install_navigation_guard(window, "app-rpc://native/index.html"));
     std::string result = "timeout";
     window.bind("ready", [&window, &result](const std::string &) {
         app::binary_rpc::Bytes event{0x82, 0x01, 0x02};
@@ -379,14 +332,15 @@ TEST(BinaryWebview, NativeEventUsesBinaryScheme) {
 
 TEST(NavigationGuard, BlocksForeignTopLevelNavigation) {
     webview::webview window(false, nullptr);
-    ASSERT_TRUE(app::install_navigation_guard(
-        window, "app-rpc://native/index.html"));
+    ASSERT_TRUE(
+        app::install_navigation_guard(window, "app-rpc://native/index.html"));
     std::string result = "timeout";
-    window.bind("reportNavigation", [&window, &result](const std::string &value) {
-        result = value;
-        window.terminate();
-        return std::string("null");
-    });
+    window.bind("reportNavigation",
+                [&window, &result](const std::string &value) {
+                    result = value;
+                    window.terminate();
+                    return std::string("null");
+                });
     const auto timeout = g_timeout_add_seconds(
         5,
         +[](gpointer data) -> gboolean {
@@ -395,11 +349,10 @@ TEST(NavigationGuard, BlocksForeignTopLevelNavigation) {
         },
         &window);
     app::binary_rpc::load_html_with_binary_origin(
-        window,
-        "<!doctype html><title>trusted</title><script>"
-        "location.href='https://example.invalid/foreign';"
-        "setTimeout(()=>reportNavigation(document.title),250);"
-        "</script>");
+        window, "<!doctype html><title>trusted</title><script>"
+                "location.href='https://example.invalid/foreign';"
+                "setTimeout(()=>reportNavigation(document.title),250);"
+                "</script>");
     window.run();
     if (result != "timeout") {
         g_source_remove(timeout);
@@ -490,9 +443,10 @@ TEST(BinaryWindowManager, CreatesChildWithTypedBootstrap) {
     ASSERT_TRUE(stored.has_value());
     EXPECT_EQ(stored->window_id, id);
     EXPECT_EQ(stored->width, 840.0);
-    EXPECT_EQ(app::bindings::JsConv<app::OpaqueValue>::to_json(stored->extras),
-              (app::bindings::json{{"kind", "dockview"},
-                                   {"panel", {{"component", "InspectorPanel"}}}}));
+    EXPECT_EQ(
+        app::bindings::JsConv<app::OpaqueValue>::to_json(stored->extras),
+        (app::bindings::json{{"kind", "dockview"},
+                             {"panel", {{"component", "InspectorPanel"}}}}));
 }
 
 TEST(BinaryWindowManager, ExternalProductionChildHasNoNativeBindings) {

@@ -10,7 +10,6 @@ int main() {
     app::binary_rpc::Dispatcher dispatcher;
     dispatcher.bind(1, [](auto &, auto &out) { out.i32(42); });
     dispatcher.bind(2, [](auto &in, auto &out) { out.bytes(in.bytes()); });
-    app::binary_rpc::bind_cbor(dispatcher, "counterCbor", []() { return 42; });
 
     webview::webview window(false, nullptr);
     if (!app::binary_rpc::install_transport(window, std::move(dispatcher))) {
@@ -58,25 +57,10 @@ int main() {
         const jsonSmall = async () => {
           if (await legacyCounter() !== 42) throw new Error('JSON counter');
         };
-        let hash = 2166136261;
-        for (const byte of new TextEncoder().encode('counterCbor')) {
-          hash = Math.imul(hash ^ byte, 16777619) >>> 0;
-        }
-        const cborSmall = async () => {
-          const response = await fetch(`app-rpc://native/${hash}`, {
-            method: 'POST', body: Uint8Array.of(0x80),
-            headers: {'Content-Type': 'application/octet-stream'}
-          });
-          const bytes = new Uint8Array(await response.arrayBuffer());
-          if (bytes[0] !== 0 || bytes[8] !== 42)
-            throw new Error('CBOR counter');
-        };
         await measure(20, jsonSmall);
         await measure(20, binarySmall);
-        await measure(20, cborSmall);
         const smallJsonMs = await measure(300, jsonSmall);
         const smallBinaryMs = await measure(300, binarySmall);
-        const smallCborMs = await measure(300, cborSmall);
 
         const size = 1024 * 1024;
         const payload = new Uint8Array(size + 4);
@@ -106,8 +90,7 @@ int main() {
         await measure(2, binaryBulk);
         const bulkJsonMs = await measure(5, jsonBulk);
         const bulkBinaryMs = await measure(5, binaryBulk);
-        report(`small JSON ${smallJsonMs.toFixed(3)} ms, direct ${smallBinaryMs.toFixed(3)} ms, ` +
-          `CBOR ${smallCborMs.toFixed(3)} ms; ` +
+        report(`small JSON ${smallJsonMs.toFixed(3)} ms, direct ${smallBinaryMs.toFixed(3)} ms; ` +
           `1 MiB JSON/base64 ${bulkJsonMs.toFixed(3)} ms, binary ${bulkBinaryMs.toFixed(3)} ms`);
       })().catch(error => report(String(error)));
     </script>)html");

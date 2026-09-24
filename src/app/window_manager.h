@@ -3,13 +3,14 @@
 // WindowManager - Gerencia janelas nativas adicionais (multi-janela)
 // =============================================================================
 
-#include "app/drag_tracker.h"
 #include "app/binary_rpc_transport.h"
 #include "app/binding_policy.h"
 #include "app/bindings_with_meta.h"
+#include "app/drag_tracker.h"
+#include "app/native_event.h"
 #include "app/native_types.h"
-#include "app/navigation_policy.h"
 #include "app/navigation_guard.h"
+#include "app/navigation_policy.h"
 #include "app/window_platform.h"
 #include "webview/webview.h"
 #include <atomic>
@@ -19,7 +20,6 @@
 #include <limits>
 #include <memory>
 #include <mutex>
-#include <nlohmann/json.hpp>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -36,7 +36,6 @@ namespace app {
 
 class WindowManager {
   public:
-    using json = nlohmann::json;
     using BindingsSetup = std::function<void(webview::webview &)>;
     struct WindowSize {
         int width;
@@ -90,7 +89,8 @@ class WindowManager {
         return window_id;
     }
 
-    std::optional<WindowBootstrap> take_bootstrap(const std::string &window_id) {
+    std::optional<WindowBootstrap>
+    take_bootstrap(const std::string &window_id) {
         std::lock_guard<std::mutex> lock(mu_);
         auto it = bootstraps_.find(window_id);
         if (it == bootstraps_.end()) {
@@ -111,14 +111,14 @@ class WindowManager {
         return out;
     }
 
-    bool post_event(const std::string &window_id, const json &event) {
-        return post_opaque_event(window_id, OpaqueValue{event});
-    }
-
     bool post_opaque_event(const std::string &window_id,
                            const OpaqueValue &event) {
+        return post_event(window_id, NativeEvent::forwarded(event));
+    }
+
+    bool post_event(const std::string &window_id, NativeEvent event) {
         if (window_id == main_window_id_) {
-            main_window_.dispatch([this, payload = event] {
+            main_window_.dispatch([this, payload = std::move(event)] {
                 deliver_event(main_window_, std::move(payload),
                               binary_transport_enabled_);
             });
@@ -133,7 +133,7 @@ class WindowManager {
         if (!exists) {
             return false;
         }
-        main_window_.dispatch([this, window_id, payload = event] {
+        main_window_.dispatch([this, window_id, payload = std::move(event)] {
             webview::webview *target = nullptr;
             bool binary_ready = false;
             {
@@ -142,8 +142,8 @@ class WindowManager {
                 if (it != windows_.end()) {
                     target = it->second.get();
                     auto info = window_info_.find(window_id);
-                    binary_ready = info != window_info_.end() &&
-                                   info->second.binary_ready;
+                    binary_ready =
+                        info != window_info_.end() && info->second.binary_ready;
                 }
             }
             if (!target) {
@@ -154,27 +154,21 @@ class WindowManager {
         return true;
     }
 
-    static void deliver_event(webview::webview &window,
-                              OpaqueValue event, bool binary_ready) {
+    static void deliver_event(webview::webview &window, NativeEvent event,
+                              bool binary_ready) {
         try {
             if (binary_ready) {
-                if (auto *bytes =
-                        std::get_if<binary_rpc::Bytes>(&event.storage)) {
-                    if (binary_rpc::post_event_bytes(window, *bytes)) {
-                        return;
-                    }
-                } else {
-                    auto encoded = json::to_cbor(
-                        std::get<json>(event.storage));
-                    if (binary_rpc::post_event_bytes(window, encoded)) {
-                        return;
-                    }
+                auto encoded = encode_native_event(event);
+                if (!binary_rpc::post_event_bytes(window, encoded)) {
+                    std::cerr << "[WindowManager] Binary event queue rejected "
+                                 "event\n";
                 }
+                return;
             }
-            const std::string payload =
-                bindings::JsConv<OpaqueValue>::to_json(event).dump();
+            const std::string payload = legacy_native_event(event).dump();
             window.eval("window.dispatchEvent(new CustomEvent('native-event', "
-                        "{ detail: " + payload + " }));");
+                        "{ detail: " +
+                        payload + " }));");
         } catch (const std::exception &error) {
             std::cerr << "[WindowManager] Failed to deliver event: "
                       << error.what() << std::endl;
@@ -206,8 +200,7 @@ class WindowManager {
                 removed = true;
             }
             if (removed) {
-                emit_main_event({{"type", "native-window.closed"},
-                                 {"windowId", window_id}});
+                emit_main_event(NativeEvent::window_closed(window_id));
             }
         });
         return true;
@@ -242,19 +235,12 @@ class WindowManager {
         drag_tracker_.stop();
 
         if (!hovered_id.empty() && hovered_id != origin_id) {
-            post_event(hovered_id,
-                       {{"type", "dock.dragLeave"},
-                        {"payload", {{"originWindowId", origin_id}}}});
+            post_event(hovered_id, NativeEvent::drag_leave(origin_id));
         }
 
         if (!origin_id.empty() && payload) {
-            post_event(origin_id, {{"type", "dock.dragComplete"},
-                                   {"payload",
-                                    {{"originWindowId", origin_id},
-                                     {"targetWindowId", target_window_id},
-                                     {"dragPayload",
-                                      bindings::JsConv<OpaqueValue>::to_json(
-                                          *payload)}}}});
+            post_event(origin_id, NativeEvent::drag_complete(
+                                      origin_id, target_window_id, *payload));
         }
 
         return payload;
@@ -292,9 +278,7 @@ class WindowManager {
             drag_tracker_.stop();
         }
         if (!previous_hovered.empty() && previous_hovered != origin_id) {
-            post_event(previous_hovered,
-                       {{"type", "dock.dragLeave"},
-                        {"payload", {{"originWindowId", origin_id}}}});
+            post_event(previous_hovered, NativeEvent::drag_leave(origin_id));
         }
         OutsideDrop result{std::move(*payload), std::nullopt};
         if (cursor) {
@@ -319,9 +303,7 @@ class WindowManager {
         drag_tracker_.stop();
 
         if (!hovered_id.empty() && hovered_id != origin_id) {
-            post_event(hovered_id,
-                       {{"type", "dock.dragLeave"},
-                        {"payload", {{"originWindowId", origin_id}}}});
+            post_event(hovered_id, NativeEvent::drag_leave(origin_id));
         }
     }
 
@@ -342,12 +324,12 @@ class WindowManager {
     static std::string append_window_id(std::string_view url,
                                         const std::string &window_id) {
         const auto hash_pos = url.find('#');
-        const std::string base =
-            hash_pos == std::string_view::npos ? std::string(url)
-                                          : std::string(url.substr(0, hash_pos));
-        const std::string suffix =
-            hash_pos == std::string_view::npos ? ""
-                                          : std::string(url.substr(hash_pos));
+        const std::string base = hash_pos == std::string_view::npos
+                                     ? std::string(url)
+                                     : std::string(url.substr(0, hash_pos));
+        const std::string suffix = hash_pos == std::string_view::npos
+                                       ? ""
+                                       : std::string(url.substr(hash_pos));
         const char sep = base.find('?') == std::string::npos ? '?' : '&';
         return base + sep + "wid=" + window_id + suffix;
     }
@@ -358,7 +340,8 @@ class WindowManager {
         cfg.width = default_width_;
         cfg.height = default_height_;
         cfg.title = title_base_ + " - " + window_id;
-        if (bootstrap.title) cfg.title = *bootstrap.title;
+        if (bootstrap.title)
+            cfg.title = *bootstrap.title;
         cfg.width = rounded_value(bootstrap.width).value_or(default_width_);
         cfg.height = rounded_value(bootstrap.height).value_or(default_height_);
         cfg.left = rounded_value(bootstrap.left);
@@ -415,7 +398,7 @@ class WindowManager {
     void load_content(webview::webview &window, const std::string &window_id,
                       const WindowBootstrap &bootstrap,
                       [[maybe_unused]] bool binary_ready) const {
-        const std::string id_literal = json(window_id).dump();
+        const std::string id_literal = bindings::json(window_id).dump();
         const std::string init_script =
             "window.__APP_WINDOW_ID__ = " + id_literal + ";";
         window.init(init_script);
@@ -440,8 +423,8 @@ class WindowManager {
 #endif
     }
 
-    void emit_main_event(const json &detail) {
-        post_event(main_window_id_, detail);
+    void emit_main_event(NativeEvent event) {
+        post_event(main_window_id_, std::move(event));
     }
 
     void handle_window_creation_failure(const std::string &window_id,
@@ -454,9 +437,7 @@ class WindowManager {
         }
         std::cerr << "[WindowManager] Failed to create window '" << window_id
                   << "': " << message << std::endl;
-        emit_main_event({{"type", "native-window.error"},
-                         {"windowId", window_id},
-                         {"message", message}});
+        emit_main_event(NativeEvent::window_error(window_id, message));
     }
 
     void create_window_on_ui_thread(const std::string &window_id) {
@@ -489,8 +470,8 @@ class WindowManager {
             if (should_install_bindings(custom_url_)) {
                 if (dev_mode_) {
                     const auto origin = parse_trusted_origin(dev_url_);
-                    trusted = origin &&
-                              is_trusted_navigation(content_url, *origin);
+                    trusted =
+                        origin && is_trusted_navigation(content_url, *origin);
                 } else {
                     trusted = content_url.empty();
                 }
@@ -503,24 +484,25 @@ class WindowManager {
                 trusted_navigation_url = {};
 #endif
             }
-            if (trusted && !install_navigation_guard(*window,
-                                                     trusted_navigation_url)) {
+            if (trusted &&
+                !install_navigation_guard(*window, trusted_navigation_url)) {
                 throw std::runtime_error("Failed to guard child navigation");
-            }
-            if (bindings_setup_ && trusted) {
-                bindings_setup_(*window);
             }
             const bool binary_ready =
                 trusted && binary_transport_enabled_ && content_url.empty() &&
                 binary_rpc::shares_transport_context(main_window_, *window);
+            if (trusted && binary_transport_enabled_ && !binary_ready) {
+                throw std::runtime_error(
+                    "Child cannot share binary RPC transport");
+            }
             if (binary_ready) {
                 binary_rpc::authorize_view(*window);
-                bindings::remove_legacy_bindings(*window);
                 window->init("window.__APP_BINARY_RPC__ = { endpoint: '" +
                              std::string(binary_rpc::rpc_base) + "' };");
+            } else if (bindings_setup_ && trusted) {
+                bindings_setup_(*window);
             }
-            load_content(*window, window_id, bootstrap_snapshot,
-                         binary_ready);
+            load_content(*window, window_id, bootstrap_snapshot, binary_ready);
 
             {
                 std::lock_guard<std::mutex> lock(mu_);
@@ -575,14 +557,10 @@ class WindowManager {
         }
 
         if (!previous_id.empty() && previous_id != origin_id) {
-            post_event(previous_id,
-                       {{"type", "dock.dragLeave"},
-                        {"payload", {{"originWindowId", origin_id}}}});
+            post_event(previous_id, NativeEvent::drag_leave(origin_id));
         }
         if (!hovered_id.empty() && hovered_id != origin_id && has_payload) {
-            post_event(hovered_id,
-                       {{"type", "dock.dragHover"},
-                        {"payload", {{"originWindowId", origin_id}}}});
+            post_event(hovered_id, NativeEvent::drag_hover(origin_id));
         }
     }
 

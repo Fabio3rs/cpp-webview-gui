@@ -1,6 +1,5 @@
-import { decodeCbor, encodeCbor } from './cbor.js'
 import {
-    readBootstrap, readOpaque, readOutsideDrop, readWindowList,
+    readBootstrap, readNativeEvent, readOpaque, readOutsideDrop, readWindowList,
     writeBootstrap, writeOpaque
 } from './native_wire_types.js'
 
@@ -219,11 +218,6 @@ export function methodId(name) {
     return hash
 }
 
-export async function callCbor(name, args) {
-    const response = await requestBinary(methodId(name), encodeCbor(args))
-    return decodeCbor(response)
-}
-
 export function installBinaryEventReceiver() {
     if (!window.__APP_BINARY_RPC__) return
     let pending = Promise.resolve()
@@ -233,7 +227,9 @@ export function installBinaryEventReceiver() {
                 method: 'GET', cache: 'no-store'
             })
             if (!response.ok) throw new Error(`Native event ${response.status}`)
-            const detail = decodeCbor(new Uint8Array(await response.arrayBuffer()))
+            const reader = new WireReader(new Uint8Array(await response.arrayBuffer()))
+            const detail = readNativeEvent(reader)
+            reader.finish()
             window.dispatchEvent(new CustomEvent('native-event', { detail }))
         }).catch(error => {
             console.error('[UI] Failed to receive native event:', error)

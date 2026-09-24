@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { WireReader, WireWriter, echoBytesBinary, getCounterBinary, methodId, installBinaryBindings, installBinaryEventReceiver } from '../src/binary_rpc.js'
 import { decodeCbor, encodeCbor } from '../src/cbor.js'
-import { readBootstrap, readOpaque, readOutsideDrop, readWindowList, writeBootstrap, writeOpaque } from '../src/native_wire_types.js'
+import { readBootstrap, readNativeEvent, readOpaque, readOutsideDrop, readWindowList, writeBootstrap, writeOpaque } from '../src/native_wire_types.js'
 import { nativeBindingNames } from '../src/native_binding_names.js'
 import { readFileSync } from 'node:fs'
 
@@ -191,7 +191,8 @@ test('native events cross the scheme as bytes and preserve order', async () => {
         globalThis.fetch = async (url, options) => {
             assert.equal(options.method, 'GET')
             const token = Number(url.split('/').at(-1))
-            return new Response(encodeCbor({ type: 'dock.move', payload: { token } }))
+            return new Response(new WireWriter().u8(0)
+                .bytes(encodeCbor({ type: 'dock.move', payload: { token } })).finish())
         }
         installBinaryEventReceiver()
         await Promise.all([window.__APP_NATIVE_EVENT__(7), window.__APP_NATIVE_EVENT__(8)])
@@ -204,6 +205,31 @@ test('native events cross the scheme as bytes and preserve order', async () => {
         globalThis.window = originalWindow
         globalThis.CustomEvent = originalCustomEvent
     }
+})
+
+test('native event tags decode typed control events and opaque drag data', () => {
+    const cases = [
+        [new WireWriter().u8(1).string('w1'),
+            { type: 'native-window.closed', windowId: 'w1' }],
+        [new WireWriter().u8(2).string('w1').string('failed'),
+            { type: 'native-window.error', windowId: 'w1', message: 'failed' }],
+        [new WireWriter().u8(3).string('main'),
+            { type: 'dock.dragLeave', payload: { originWindowId: 'main' } }],
+        [new WireWriter().u8(4).string('main'),
+            { type: 'dock.dragHover', payload: { originWindowId: 'main' } }],
+        [new WireWriter().u8(5).string('main').string('w1')
+            .bytes(encodeCbor({ panels: [1] })),
+        { type: 'dock.dragComplete', payload: {
+            originWindowId: 'main', targetWindowId: 'w1', dragPayload: { panels: [1] }
+        } }]
+    ]
+    for (const [writer, expected] of cases) {
+        const reader = new WireReader(writer.finish())
+        assert.deepEqual(readNativeEvent(reader), expected)
+        reader.finish()
+    }
+    assert.throws(() => readNativeEvent(new WireReader(Uint8Array.of(255))),
+        /Unknown native event kind/)
 })
 
 test('ping uses typed optional input and struct response', async () => {

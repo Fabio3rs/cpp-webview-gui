@@ -1,8 +1,10 @@
+#include <gtest/gtest.h>
+
 #include "app/binary_rpc.h"
 #include "app/binding_policy.h"
+#include "app/native_event.h"
 #include "app/navigation_policy.h"
 #include "app/wire_codec.h"
-#include <gtest/gtest.h>
 
 #include <array>
 #include <cstdint>
@@ -21,10 +23,10 @@ TEST(NavigationPolicy, AcceptsOnlyTheConfiguredOrigin) {
     const auto trusted =
         app::parse_trusted_origin("http://127.0.0.1:5173/index.html");
     ASSERT_TRUE(trusted.has_value());
-    EXPECT_TRUE(app::is_trusted_navigation(
-        "HTTP://127.0.0.1:5173/page?wid=w1", *trusted));
-    EXPECT_FALSE(app::is_trusted_navigation(
-        "http://127.0.0.1:5174/page", *trusted));
+    EXPECT_TRUE(app::is_trusted_navigation("HTTP://127.0.0.1:5173/page?wid=w1",
+                                           *trusted));
+    EXPECT_FALSE(app::is_trusted_navigation("http://127.0.0.1:5174/page",
+                                            *trusted));
     EXPECT_FALSE(app::is_trusted_navigation(
         "http://127.0.0.1:5173.evil.invalid/page", *trusted));
     EXPECT_FALSE(app::is_trusted_navigation(
@@ -32,21 +34,23 @@ TEST(NavigationPolicy, AcceptsOnlyTheConfiguredOrigin) {
     EXPECT_FALSE(app::is_trusted_navigation(
         "http://127.0.0.1:5173\\@evil.invalid/page", *trusted));
     EXPECT_FALSE(app::is_trusted_navigation("about:blank", *trusted));
-    EXPECT_FALSE(app::is_trusted_navigation("data:text/html,hello", *trusted));
+    EXPECT_FALSE(
+        app::is_trusted_navigation("data:text/html,hello", *trusted));
 }
 
 TEST(NavigationPolicy, NormalizesDefaultPortsAndCustomScheme) {
     const auto https = app::parse_trusted_origin("https://example.invalid/");
     ASSERT_TRUE(https.has_value());
-    EXPECT_TRUE(app::is_trusted_navigation(
-        "https://EXAMPLE.invalid:443/next", *https));
-    EXPECT_FALSE(app::is_trusted_navigation(
-        "http://example.invalid/next", *https));
+    EXPECT_TRUE(app::is_trusted_navigation("https://EXAMPLE.invalid:443/next",
+                                           *https));
+    EXPECT_FALSE(app::is_trusted_navigation("http://example.invalid/next",
+                                            *https));
 
     const auto scheme =
         app::parse_trusted_origin("app-rpc://native/index.html");
     ASSERT_TRUE(scheme.has_value());
-    EXPECT_TRUE(app::is_trusted_navigation("app-rpc://native/next", *scheme));
+    EXPECT_TRUE(
+        app::is_trusted_navigation("app-rpc://native/next", *scheme));
     EXPECT_FALSE(app::is_trusted_navigation(
         "app-rpc://native.evil.invalid/next", *scheme));
 }
@@ -58,17 +62,17 @@ TEST(NavigationPolicy, OpensOnlyUserClickedExternalWebLinks) {
     EXPECT_EQ(app::decide_navigation("app-rpc://native/page", *trusted,
                                      false, false, false),
               Decision::allow);
-    EXPECT_EQ(app::decide_navigation("https://example.invalid/", *trusted,
-                                     false, true, true),
+    EXPECT_EQ(app::decide_navigation("https://example.invalid/",
+                                     *trusted, false, true, true),
               Decision::open_external);
-    EXPECT_EQ(app::decide_navigation("https://example.invalid/", *trusted,
-                                     true, true, true),
+    EXPECT_EQ(app::decide_navigation("https://example.invalid/",
+                                     *trusted, true, true, true),
               Decision::open_external);
-    EXPECT_EQ(app::decide_navigation("https://example.invalid/", *trusted,
-                                     false, false, true),
+    EXPECT_EQ(app::decide_navigation("https://example.invalid/",
+                                     *trusted, false, false, true),
               Decision::deny);
-    EXPECT_EQ(app::decide_navigation("https://example.invalid/", *trusted,
-                                     false, true, false),
+    EXPECT_EQ(app::decide_navigation("https://example.invalid/",
+                                     *trusted, false, true, false),
               Decision::deny);
     EXPECT_EQ(app::decide_navigation("file:///tmp/file", *trusted, false,
                                      true, true),
@@ -76,9 +80,9 @@ TEST(NavigationPolicy, OpensOnlyUserClickedExternalWebLinks) {
     EXPECT_EQ(app::decide_navigation("app-rpc://native/page", *trusted,
                                      true, true, true),
               Decision::deny);
-    EXPECT_EQ(app::decide_opaque_navigation("https://example.invalid/", true,
-                                            true),
-              Decision::open_external);
+    EXPECT_EQ(
+        app::decide_opaque_navigation("https://example.invalid/", true, true),
+        Decision::open_external);
     EXPECT_EQ(app::decide_opaque_navigation("about:blank", true, true),
               Decision::deny);
 }
@@ -92,12 +96,12 @@ TEST(NavigationPolicy, EmbeddedDocumentAllowsOnlyItsInitialBlankNavigation) {
               Decision::allow);
     EXPECT_EQ(session.decide("about:blank", true, false, false, false),
               Decision::deny);
-    EXPECT_EQ(session.decide("https://example.invalid/", true, false, false,
-                             false),
-              Decision::deny);
-    EXPECT_EQ(session.decide("https://example.invalid/", true, true, true,
-                             true),
-              Decision::open_external);
+    EXPECT_EQ(
+        session.decide("https://example.invalid/", true, false, false, false),
+        Decision::deny);
+    EXPECT_EQ(
+        session.decide("https://example.invalid/", true, true, true, true),
+        Decision::open_external);
 
     app::NavigationSession empty_url_session(std::nullopt);
     EXPECT_EQ(empty_url_session.decide("", true, false, false, false),
@@ -119,6 +123,50 @@ TEST(BinaryWire, RoundTripsPrimitiveValues) {
     EXPECT_DOUBLE_EQ(reader.f64(), 3.14159);
     EXPECT_EQ(reader.string(), "olá");
     EXPECT_NO_THROW(reader.finish());
+}
+
+TEST(NativeEventWire, EncodesFixedFieldsWithoutJsonDom) {
+    const auto event = app::NativeEvent::window_error("w1", "failed");
+    EXPECT_FALSE(event.payload.has_value());
+    const auto bytes = app::encode_native_event(event);
+    rpc::Reader reader(bytes);
+    EXPECT_EQ(reader.u8(),
+              static_cast<std::uint8_t>(app::NativeEventKind::window_error));
+    EXPECT_EQ(reader.string(), "w1");
+    EXPECT_EQ(reader.string(), "failed");
+    EXPECT_NO_THROW(reader.finish());
+}
+
+TEST(NativeEventWire, PreservesOpaqueDragPayload) {
+    const rpc::Bytes cbor{0xa1, 0x61, 0x78, 0x01};
+    const auto event =
+        app::NativeEvent::drag_complete("main", "w1", app::OpaqueValue{cbor});
+    const auto bytes = app::encode_native_event(event);
+    rpc::Reader reader(bytes);
+    EXPECT_EQ(reader.u8(),
+              static_cast<std::uint8_t>(app::NativeEventKind::drag_complete));
+    EXPECT_EQ(reader.string(), "main");
+    EXPECT_EQ(reader.string(), "w1");
+    const auto payload = reader.bytes();
+    EXPECT_EQ(rpc::Bytes(payload.begin(), payload.end()), cbor);
+    EXPECT_NO_THROW(reader.finish());
+}
+
+TEST(NativeEventWire, KeepsDevelopmentEventShape) {
+    const auto closed = app::NativeEvent::window_closed("w1");
+    EXPECT_EQ(app::legacy_native_event(closed),
+              (app::bindings::json{{"type", "native-window.closed"},
+                                   {"windowId", "w1"}}));
+
+    const app::OpaqueValue payload{app::bindings::json{{"panels", {1}}}};
+    const auto complete =
+        app::NativeEvent::drag_complete("main", "w1", payload);
+    EXPECT_EQ(app::legacy_native_event(complete),
+              (app::bindings::json{
+                  {"type", "dock.dragComplete"},
+                  {"payload", {{"originWindowId", "main"},
+                               {"targetWindowId", "w1"},
+                               {"dragPayload", {{"panels", {1}}}}}}}));
 }
 
 TEST(BinaryWire, RejectsTruncatedAndTrailingMessages) {
@@ -175,9 +223,8 @@ TEST(BinaryDispatcher, RejectsUnknownAndExtraArguments) {
 
 TEST(BinaryDispatcher, EnvelopesTransportResponsesWithoutChangingPayload) {
     rpc::Dispatcher dispatcher;
-    dispatcher.bind(7, [](rpc::Reader &, rpc::Writer &writer) {
-        writer.i32(42);
-    });
+    dispatcher.bind(7,
+                    [](rpc::Reader &, rpc::Writer &writer) { writer.i32(42); });
     const auto response = dispatcher.call_enveloped(7, {});
     rpc::Reader reader(response);
     EXPECT_EQ(reader.u8(), 0);
@@ -218,7 +265,7 @@ TEST(BinaryWireCodec, RejectsInvalidBooleanAndVectorLength) {
     const auto encoded = std::move(writer).take();
     rpc::Reader vector_reader(encoded);
     EXPECT_THROW(
-        static_cast<void>(rpc::WireCodec<std::vector<std::int32_t>>::read(
-            vector_reader)),
+        static_cast<void>(
+            rpc::WireCodec<std::vector<std::int32_t>>::read(vector_reader)),
         rpc::WireError);
 }

@@ -4,12 +4,13 @@
 // =============================================================================
 
 #include "app/cli_options.h"
+
 #include "app/binary_rpc_transport.h"
 #include "app/binding_policy.h"
 #include "app/config.h"
 #include "app/handlers.h"
-#include "app/navigation_policy.h"
 #include "app/navigation_guard.h"
+#include "app/navigation_policy.h"
 #include "app/shutdown_monitor.h"
 #include "app/window_manager.h"
 #include "dev_server.h"
@@ -146,9 +147,8 @@ class Application {
             binary_rpc::Dispatcher binary_rpc;
             constexpr std::uint32_t echo_method_id = 5;
             constexpr std::uint32_t add_method_id = 6;
-            binary_rpc.bind(echo_method_id, [](auto &in, auto &out) {
-                out.bytes(in.bytes());
-            });
+            binary_rpc.bind(echo_method_id,
+                            [](auto &in, auto &out) { out.bytes(in.bytes()); });
             binary_rpc.bind(add_method_id, [](auto &in, auto &out) {
                 const auto left = in.i32();
                 const auto right = in.i32();
@@ -164,8 +164,7 @@ class Application {
             // Setup window manager and bindings
             window_manager_ = std::make_unique<WindowManager>(
                 *window_, dev_mode_, dev_url_, options_.url,
-                WindowManager::WindowSize{width, height},
-                config::WINDOW_TITLE);
+                WindowManager::WindowSize{width, height}, config::WINDOW_TITLE);
             window_manager_->set_bindings_setup(
                 [this](webview::webview &w) { setup_bindings(w); });
             std::string_view trusted_navigation_url = dev_url_;
@@ -178,7 +177,8 @@ class Application {
             }
             if (should_install_bindings(options_.url) &&
                 !install_navigation_guard(*window_, trusted_navigation_url)) {
-                throw std::runtime_error("Failed to guard privileged navigation");
+                throw std::runtime_error(
+                    "Failed to guard privileged navigation");
             }
 #if defined(__linux__) || defined(_WIN32) || defined(__APPLE__)
             if (dev_mode_) {
@@ -187,12 +187,13 @@ class Application {
                 setup_bindings(*window_, &binary_rpc);
                 const bool binary_ready = binary_rpc::install_transport(
                     *window_, std::move(binary_rpc));
-                if (binary_ready) {
-                    bindings::remove_legacy_bindings(*window_);
-                    window_->init("window.__APP_BINARY_RPC__ = { endpoint: '" +
-                                  std::string(binary_rpc::rpc_base) + "' };");
-                    window_manager_->set_binary_transport_enabled(true);
+                if (!binary_ready) {
+                    throw std::runtime_error(
+                        "Binary RPC transport unavailable");
                 }
+                window_->init("window.__APP_BINARY_RPC__ = { endpoint: '" +
+                              std::string(binary_rpc::rpc_base) + "' };");
+                window_manager_->set_binary_transport_enabled(true);
             }
 #else
             if (should_install_bindings(options_.url)) {
@@ -308,19 +309,20 @@ class Application {
             return;
         }
 
-        APP_BIND_TYPED_WIRE(w, binary, "createNativeWindow",
-                       [this](WindowBootstrap bootstrap) {
-                           return window_manager_->create_window(bootstrap);
-                       });
-        APP_BIND_TYPED_WIRE(w, binary, "getBootstrap", [this](const std::string &window_id) {
-            auto bootstrap = window_manager_->take_bootstrap(window_id);
-            if (!bootstrap) {
-                throw app::bindings::BindingError(
-                    "Bootstrap not found",
-                    app::bindings::ErrorCode::MissingArg);
-            }
-            return *bootstrap;
-        });
+        APP_BIND_TYPED_WIRE(
+            w, binary, "createNativeWindow", [this](WindowBootstrap bootstrap) {
+                return window_manager_->create_window(bootstrap);
+            });
+        APP_BIND_TYPED_WIRE(
+            w, binary, "getBootstrap", [this](const std::string &window_id) {
+                auto bootstrap = window_manager_->take_bootstrap(window_id);
+                if (!bootstrap) {
+                    throw app::bindings::BindingError(
+                        "Bootstrap not found",
+                        app::bindings::ErrorCode::MissingArg);
+                }
+                return *bootstrap;
+            });
         APP_BIND_TYPED_WIRE(
             w, binary, "postNativeEvent",
             [this](const std::string &window_id, OpaqueValue event) {
@@ -331,32 +333,34 @@ class Application {
                 }
             });
         APP_BIND_TYPED_WIRE(w, binary, "closeNativeWindow",
-                       [this](const std::string &window_id) {
-                           if (!window_manager_->close_window(window_id)) {
-                               throw app::bindings::BindingError(
-                                   "Window not found",
-                                   app::bindings::ErrorCode::MissingArg);
-                           }
-                       });
-        APP_BIND_TYPED_WIRE(w, binary, "listNativeWindows",
-                       [this]() { return window_manager_->list_windows(); });
+                            [this](const std::string &window_id) {
+                                if (!window_manager_->close_window(window_id)) {
+                                    throw app::bindings::BindingError(
+                                        "Window not found",
+                                        app::bindings::ErrorCode::MissingArg);
+                                }
+                            });
+        APP_BIND_TYPED_WIRE(w, binary, "listNativeWindows", [this]() {
+            return window_manager_->list_windows();
+        });
         APP_BIND_TYPED_WIRE(
             w, binary, "startNativeDrag",
             [this](const std::string &window_id, OpaqueValue payload) {
                 window_manager_->start_drag_tracking(window_id, payload);
             });
         APP_BIND_TYPED_WIRE(w, binary, "completeNativeDrag",
-                       [this](const std::string &target_window_id) {
-                           return window_manager_->complete_drag_tracking(
-                               target_window_id);
-                       });
-        APP_BIND_TYPED_WIRE(w, binary, "stopNativeDrag",
-                       [this]() { window_manager_->stop_drag_tracking(); });
+                            [this](const std::string &target_window_id) {
+                                return window_manager_->complete_drag_tracking(
+                                    target_window_id);
+                            });
+        APP_BIND_TYPED_WIRE(w, binary, "stopNativeDrag", [this]() {
+            window_manager_->stop_drag_tracking();
+        });
         APP_BIND_TYPED_WIRE(w, binary, "completeNativeDragOutside",
-                       [this](const std::string &window_id) {
-                           return window_manager_->complete_drag_outside(
-                               window_id);
-                       });
+                            [this](const std::string &window_id) {
+                                return window_manager_->complete_drag_outside(
+                                    window_id);
+                            });
     }
 
     // =========================================================================

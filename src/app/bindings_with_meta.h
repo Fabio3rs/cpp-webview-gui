@@ -1,10 +1,8 @@
 #pragma once
 
+#include "app/binary_rpc_bindings.h"
 #include "app/bindings.h"
 #include "app/bindings_meta.h"
-#include "app/binary_rpc_bindings.h"
-
-#include <unordered_set>
 
 namespace app::bindings {
 
@@ -24,25 +22,17 @@ namespace app::bindings {
 
 template <typename F>
 void bind_typed_with_wire_meta(
-    webview::webview &w, binary_rpc::Dispatcher *binary, const std::string &name,
-    F &&func, std::source_location begin = std::source_location::current(),
+    webview::webview &w, binary_rpc::Dispatcher *binary,
+    const std::string &name, F &&func,
+    std::source_location begin = std::source_location::current(),
     std::source_location end = std::source_location::current()) {
     using Callable = std::decay_t<F>;
     Callable callable(std::forward<F>(func));
-    bind_typed_with_meta(w, name, callable, begin, end);
     if (binary) {
+        meta::register_binding_meta<Callable>(name, begin, end);
         binary_rpc::bind_wire(*binary, name, callable);
-    }
-}
-
-// The binary page installs generated JS functions after the WebView glue runs.
-// Remove its unused JSON handlers so later navigations cannot invoke them.
-inline void remove_legacy_bindings(webview::webview &window) {
-    std::unordered_set<std::string> names;
-    for (const auto &binding : meta::registry()) {
-        if (names.insert(binding.name).second) {
-            window.unbind(binding.name).ensure_ok();
-        }
+    } else {
+        bind_typed_with_meta(w, name, callable, begin, end);
     }
 }
 
@@ -63,6 +53,6 @@ inline void remove_legacy_bindings(webview::webview &window) {
     {                                                                          \
         constexpr auto _bind_begin = std::source_location::current();          \
         ::app::bindings::bind_typed_with_wire_meta(                            \
-            wv, rpc, jsName, (func), _bind_begin,                               \
+            wv, rpc, jsName, (func), _bind_begin,                              \
             std::source_location::current());                                  \
     }

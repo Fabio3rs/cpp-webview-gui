@@ -1,5 +1,5 @@
 #include "app/binary_rpc_transport.h"
-#include "app/bindings.h"
+#include "app/binding_error.h"
 
 #include "webview/detail/utility/string.hh"
 

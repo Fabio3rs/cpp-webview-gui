@@ -1,12 +1,13 @@
 #pragma once
 
 #include "app/binary_rpc.h"
-#include "app/bindings.h"
+#include "app/function_traits.h"
 #include "app/wire_codec.h"
 
 #include <cstdint>
 #include <string_view>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 
 namespace app::binary_rpc {
@@ -51,43 +52,6 @@ void bind_wire(Dispatcher &dispatcher, std::string_view name, F func) {
     using Traits = bindings::function_traits<Callable>;
     bind_wire_impl(dispatcher, name, Callable(std::move(func)),
                    std::make_index_sequence<Traits::arity>{});
-}
-
-template <typename F>
-void bind_cbor(Dispatcher &dispatcher, std::string_view name, F func) {
-    using Callable = std::decay_t<F>;
-    using Result = typename bindings::function_traits<Callable>::result_type;
-    dispatcher.bind(method_id(name), [callable = Callable(std::move(func))](
-                                         Reader &reader, Writer &writer) {
-        bindings::json response;
-        try {
-            const auto input = reader.remaining();
-            const auto args =
-                bindings::json::from_cbor(input.begin(), input.end());
-            if (!args.is_array()) {
-                throw bindings::BindingError("Arguments must be an array",
-                                             bindings::ErrorCode::InvalidArgs);
-            }
-            if constexpr (std::is_void_v<Result>) {
-                bindings::call_with_json_args(callable, args);
-                response = bindings::ok(bindings::json::object());
-            } else {
-                auto value = bindings::call_with_json_args(callable, args);
-                response = bindings::ok(
-                    bindings::JsConv<std::decay_t<Result>>::to_json(value));
-            }
-        } catch (const bindings::BindingError &error) {
-            response = bindings::error(error.what(), error.code());
-        } catch (const bindings::json::exception &error) {
-            response =
-                bindings::error(error.what(), bindings::ErrorCode::InvalidJson);
-        } catch (const std::exception &error) {
-            response = bindings::error(error.what(),
-                                       bindings::ErrorCode::InternalError);
-        }
-        const auto output = bindings::json::to_cbor(response);
-        writer.raw(output);
-    });
 }
 
 } // namespace app::binary_rpc

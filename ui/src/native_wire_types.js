@@ -59,3 +59,26 @@ export function readOutsideDrop(reader) {
         return result
     })
 }
+
+// Tags mirror NativeEventKind in src/app/native_event.h.
+export function readNativeEvent(reader) {
+    const kind = reader.u8()
+    if (kind === 0) return readOpaque(reader)
+    if (kind === 1) return { type: 'native-window.closed', windowId: reader.string() }
+    if (kind === 2) return {
+        type: 'native-window.error', windowId: reader.string(), message: reader.string()
+    }
+    if (kind === 3 || kind === 4) return {
+        type: kind === 3 ? 'dock.dragLeave' : 'dock.dragHover',
+        payload: { originWindowId: reader.string() }
+    }
+    if (kind === 5) return {
+        type: 'dock.dragComplete',
+        payload: {
+            originWindowId: reader.string(),
+            targetWindowId: reader.string(),
+            dragPayload: readOpaque(reader)
+        }
+    }
+    throw new Error(`Unknown native event kind ${kind}`)
+}

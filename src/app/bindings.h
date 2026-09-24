@@ -3,6 +3,8 @@
 // Bindings - Handlers para comunicação JS <-> C++
 // =============================================================================
 
+#include "app/binding_error.h"
+#include "app/function_traits.h"
 #include "webview/webview.h"
 #include <cassert> // Para asserts (NASA-style)
 #include <functional>
@@ -21,17 +23,6 @@ namespace app::bindings {
 using json = nlohmann::json;
 
 // =============================================================================
-// Códigos de erro padronizados (type safety)
-// =============================================================================
-enum class ErrorCode {
-    InvalidJson = 400,
-    InvalidArgs = 400,
-    MissingArg = 400,
-    TypeMismatch = 400,
-    InternalError = 500
-};
-
-// =============================================================================
 // Helpers para criar respostas padronizadas (imutáveis, RAII)
 // =============================================================================
 
@@ -48,21 +39,6 @@ enum class ErrorCode {
         {"ok", false},
         {"error", {{"code", static_cast<int>(code)}, {"message", message}}}};
 }
-
-// =============================================================================
-// BindingError - erro customizado com código (RAII, strong type)
-// =============================================================================
-
-class BindingError : public std::runtime_error {
-  public:
-    explicit BindingError(std::string message, ErrorCode code)
-        : std::runtime_error(std::move(message)), code_(code) {}
-
-    [[nodiscard]] ErrorCode code() const noexcept { return code_; }
-
-  private:
-    ErrorCode code_;
-};
 
 // =============================================================================
 // Camada 0 - Bind "cru" (string -> string)
@@ -114,7 +90,8 @@ inline json to_json_value(const json &value) { return value; }
 // bind_generic - permite qualquer retorno conversível para JSON
 // =============================================================================
 template <typename F>
-void bind_generic(webview::webview &w, std::string name, F &&func) { // NOLINT(cppcoreguidelines-missing-std-forward)
+void bind_generic(webview::webview &w, std::string name,
+                  F &&func) { // NOLINT(cppcoreguidelines-missing-std-forward)
     using Callable = std::decay_t<F>;
     using ResultType = std::decay_t<decltype(std::declval<Callable>()())>;
 
@@ -259,36 +236,6 @@ template <typename T> struct JsConv<std::vector<T>> {
     }
 };
 
-template <typename T> struct function_traits;
-
-template <typename R, typename... Args> struct function_traits<R(Args...)> {
-    using result_type = R;
-    using args_tuple = std::tuple<Args...>;
-    static constexpr std::size_t arity = sizeof...(Args);
-
-    template <std::size_t I> using arg = std::tuple_element_t<I, args_tuple>;
-};
-
-template <typename R, typename... Args>
-struct function_traits<R (*)(Args...)> : function_traits<R(Args...)> {};
-
-template <typename R, typename... Args>
-struct function_traits<R (&)(Args...)> : function_traits<R(Args...)> {};
-
-template <typename C, typename R, typename... Args>
-struct function_traits<R (C::*)(Args...)> : function_traits<R(Args...)> {};
-
-template <typename C, typename R, typename... Args>
-struct function_traits<R (C::*)(Args...) const> : function_traits<R(Args...)> {
-};
-
-template <typename R, typename... Args>
-struct function_traits<std::function<R(Args...)>>
-    : function_traits<R(Args...)> {};
-
-template <typename F>
-struct function_traits : function_traits<decltype(&F::operator())> {};
-
 inline const json &arg_or_null(const json &args, std::size_t index) {
     static const json null_json = nullptr;
     if (index < args.size()) {
@@ -316,7 +263,8 @@ decltype(auto) call_with_json_args(Callable &&callable, const json &args) {
 }
 
 template <typename F>
-void bind_typed(webview::webview &w, std::string name, F &&func) { // NOLINT(cppcoreguidelines-missing-std-forward)
+void bind_typed(webview::webview &w, std::string name,
+                F &&func) { // NOLINT(cppcoreguidelines-missing-std-forward)
     using Callable = std::decay_t<F>;
     using traits = function_traits<Callable>;
     using result_t = typename traits::result_type;
