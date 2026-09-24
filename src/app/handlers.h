@@ -44,9 +44,7 @@ class HandlerRegistry {
         return {"pong", ping_message};
     }
 
-    [[nodiscard]] VersionInfo get_version() const {
-        return {config::VERSION};
-    }
+    [[nodiscard]] VersionInfo get_version() const { return {config::VERSION}; }
 
     [[nodiscard]] FileOpenInfo open_file(const std::string &path) const {
         if (path.empty()) {
@@ -67,17 +65,19 @@ class HandlerRegistry {
 // setup - Registro dos bindings da aplicação
 // =============================================================================
 
-inline void setup(webview::webview &w, const HandlerRegistry &handlers,
+inline void setup(webview::webview *w, const HandlerRegistry &handlers,
                   binary_rpc::Dispatcher *binary = nullptr) {
     // Each handler has a direct wire codec when binary transport is available.
-    APP_BIND_TYPED_WIRE(w, binary, "ping", [&handlers](std::optional<std::string> msg) {
-        return handlers.ping(msg);
-    });
+    APP_BIND_TYPED_WIRE(w, binary, "ping",
+                        [&handlers](std::optional<std::string> msg) {
+                            return handlers.ping(msg);
+                        });
     APP_BIND_TYPED_WIRE(w, binary, "getVersion",
-                   [&handlers]() { return handlers.get_version(); });
-    APP_BIND_TYPED_WIRE(w, binary, "openFile", [&handlers](const std::string &path) {
-        return handlers.open_file(path);
-    });
+                        [&handlers]() { return handlers.get_version(); });
+    APP_BIND_TYPED_WIRE(w, binary, "openFile",
+                        [&handlers](const std::string &path) {
+                            return handlers.open_file(path);
+                        });
 
     APP_BIND_TYPED_WIRE(w, binary, "getCounter", []() { return 42; });
     APP_BIND_TYPED_WIRE(w, binary, "getPi", []() {
@@ -88,9 +88,13 @@ inline void setup(webview::webview &w, const HandlerRegistry &handlers,
                         []() { return std::string("online"); });
     APP_BIND_TYPED_WIRE(w, binary, "isReady", []() { return true; });
 
-    APP_BIND_TYPED_WIRE(w, binary, "getConfig", ([]() {
-        return ConfigInfo{"dark", "pt-br"};
-    }));
+    APP_BIND_TYPED_WIRE(w, binary, "getConfig",
+                        ([]() { return ConfigInfo{"dark", "pt-br"}; }));
+}
+
+inline void setup(webview::webview &w, const HandlerRegistry &handlers,
+                  binary_rpc::Dispatcher *binary = nullptr) {
+    setup(&w, handlers, binary);
 }
 
 } // namespace app

@@ -57,8 +57,7 @@ jobs:
             -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
             -DCMAKE_BUILD_TYPE=Debug \
             -DDEV_MODE=ON \
-            -DENABLE_SANITIZERS=ON \
-            -DSHOULD_AUTO_EMIT_BINDINGS=OFF
+            -DENABLE_SANITIZERS=ON
         env:
           CC: ${{ matrix.cc }}
           CXX: ${{ matrix.cxx }}
@@ -74,8 +73,7 @@ jobs:
             -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
             -DCMAKE_BUILD_TYPE=Release \
             -DDEV_MODE=OFF \
-            -DENABLE_SANITIZERS=ON \
-            -DSHOULD_AUTO_EMIT_BINDINGS=OFF
+            -DENABLE_SANITIZERS=ON
         env:
           CC: ${{ matrix.cc }}
           CXX: ${{ matrix.cxx }}

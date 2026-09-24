@@ -15,6 +15,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include "app/dev_ports.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -39,14 +40,12 @@ namespace dev {
 enum class ServerState { Stopped, Starting, Running, Failed };
 
 struct ServerConfig {
-    constexpr static std::string_view default_dev_url = "http://127.0.0.1:5173";
     constexpr static std::string_view default_host = "127.0.0.1";
-    constexpr static int default_port = 5173;
     constexpr static std::string_view default_command = "npm run dev";
 
-    std::string dev_url{default_dev_url};
+    std::string dev_url{app::dev_ports::vite_origin({})};
     std::string host{default_host};
-    int port{default_port};
+    int port{app::dev_ports::Config{}.vite};
     std::string command{default_command};
     std::string working_dir{""}; // diretório do UI
     std::chrono::seconds timeout{30};
@@ -423,9 +422,10 @@ inline std::string get_source_dir() {
 
 inline ServerConfig get_default_config() {
     ServerConfig cfg;
-    cfg.dev_url = "http://127.0.0.1:5173";
+    const auto ports = app::dev_ports::get();
+    cfg.dev_url = app::dev_ports::vite_origin(ports);
     cfg.host = "127.0.0.1";
-    cfg.port = 5173;
+    cfg.port = ports.vite;
     cfg.command = "npm run dev";
     cfg.working_dir = get_source_dir() + "/ui";
     cfg.timeout = std::chrono::seconds{30};

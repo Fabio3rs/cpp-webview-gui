@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <type_traits>
 #include <vector>
 
@@ -12,6 +13,23 @@ namespace app::binary_rpc {
 
 // A specialization defines the binary representation of one C++ value.
 template <typename T> struct WireCodec;
+
+// Ordered fields are the contract shared by the native codec and JS emitter.
+template <typename T, typename M> struct WireField {
+    const char *name;
+    M T::*member;
+    using value_type = M;
+};
+
+template <typename T, typename M>
+constexpr WireField<T, M> wire_field(const char *name, M T::*member) {
+    return {name, member};
+}
+
+template <typename T> struct WireFields;
+
+template <typename T>
+concept HasWireFields = requires { WireFields<T>::fields(); };
 
 template <> struct WireCodec<bool> {
     static bool read(Reader &reader) {
@@ -31,7 +49,9 @@ template <> struct WireCodec<std::int32_t> {
 
 template <> struct WireCodec<std::uint32_t> {
     static std::uint32_t read(Reader &reader) { return reader.u32(); }
-    static void write(Writer &writer, std::uint32_t value) { writer.u32(value); }
+    static void write(Writer &writer, std::uint32_t value) {
+        writer.u32(value);
+    }
 };
 
 template <> struct WireCodec<double> {
@@ -92,6 +112,27 @@ template <typename T> struct WireCodec<std::vector<T>> {
         for (const auto &value : values) {
             WireCodec<T>::write(writer, value);
         }
+    }
+};
+
+template <HasWireFields T> struct WireCodec<T> {
+    static T read(Reader &reader) {
+        return std::apply(
+            [&reader](auto... fields) {
+                return T{WireCodec<typename decltype(fields)::value_type>::read(
+                    reader)...};
+            },
+            WireFields<T>::fields());
+    }
+
+    static void write(Writer &writer, const T &value) {
+        std::apply(
+            [&](auto... fields) {
+                (WireCodec<typename decltype(fields)::value_type>::write(
+                     writer, value.*(fields.member)),
+                 ...);
+            },
+            WireFields<T>::fields());
     }
 };
 

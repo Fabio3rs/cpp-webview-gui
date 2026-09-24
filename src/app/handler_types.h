@@ -28,25 +28,12 @@ template <> struct JsConv<app::PingResult> {
 
 } // namespace app::bindings
 
-namespace app::bindings::meta {
-
-template <> struct TsType<app::PingResult> {
-    static std::string name() {
-        return "{ message: string; echo: string }";
-    }
-};
-
-} // namespace app::bindings::meta
-
 namespace app::binary_rpc {
 
-template <> struct WireCodec<app::PingResult> {
-    static app::PingResult read(Reader &reader) {
-        return {reader.string(), reader.string()};
-    }
-    static void write(Writer &writer, const app::PingResult &value) {
-        writer.string(value.message);
-        writer.string(value.echo);
+template <> struct WireFields<app::PingResult> {
+    static constexpr auto fields() {
+        return std::make_tuple(wire_field("message", &app::PingResult::message),
+                               wire_field("echo", &app::PingResult::echo));
     }
 };
 

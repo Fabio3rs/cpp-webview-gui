@@ -25,9 +25,7 @@
 namespace app {
 namespace {
 
-constexpr unsigned short port = 5174;
 constexpr std::size_t max_headers = 8192;
-constexpr std::string_view expected_origin = "http://127.0.0.1:5173";
 
 #if defined(_WIN32)
 using Socket = SOCKET;
@@ -166,8 +164,10 @@ void reply(Socket socket, int status, binary_rpc::Bytes body = {}) {
 } // namespace
 
 DevRpcServer::DevRpcServer(webview::webview &window,
-                           binary_rpc::Dispatcher dispatcher)
+                           binary_rpc::Dispatcher dispatcher, int port,
+                           std::string expected_origin)
     : window_(window), dispatcher_(std::move(dispatcher)),
+      port_(port), expected_origin_(std::move(expected_origin)),
       token_(make_token()) {}
 
 DevRpcServer::~DevRpcServer() {
@@ -219,7 +219,7 @@ bool DevRpcServer::start() {
 #endif
     sockaddr_in address{};
     address.sin_family = AF_INET;
-    address.sin_port = htons(port);
+    address.sin_port = htons(static_cast<unsigned short>(port_));
     address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     if (bind(socket, reinterpret_cast<sockaddr *>(&address), sizeof(address)) !=
             0 ||
@@ -279,7 +279,7 @@ void DevRpcServer::handle_client(std::uintptr_t raw_socket) {
         return;
     }
     if (request.token != token_ ||
-        (!request.origin.empty() && request.origin != expected_origin)) {
+        (!request.origin.empty() && request.origin != expected_origin_)) {
         reply(socket, 403);
         return;
     }

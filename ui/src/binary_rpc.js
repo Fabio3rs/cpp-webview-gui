@@ -1,7 +1,4 @@
-import {
-    readBootstrap, readNativeEvent, readOpaque, readOutsideDrop, readWindowList,
-    writeBootstrap, writeOpaque
-} from './native_wire_types.js'
+import { readNativeEvent } from './native_wire_types.js'
 
 const textEncoder = new TextEncoder()
 const textDecoder = new TextDecoder()
@@ -192,8 +189,8 @@ async function requestBinary(id, request) {
         }
     })
     if (!response.ok) {
-        const error = new Error(await response.text())
-        error.status = response.status
+        const error = Object.assign(new Error(await response.text()),
+            { status: response.status })
         throw error
     }
     const envelope = new WireReader(new Uint8Array(await response.arrayBuffer()))
@@ -205,8 +202,7 @@ async function requestBinary(id, request) {
     const code = envelope.u32()
     const message = envelope.string()
     envelope.finish()
-    const error = new Error(message)
-    error.code = code
+    const error = Object.assign(new Error(message), { code })
     throw error
 }
 
@@ -244,56 +240,28 @@ export function installBinaryEventReceiver() {
     }
 }
 
-async function callTyped(name, write, read) {
+export async function callTyped(id, write, read) {
     const writer = new WireWriter()
     write(writer)
-    const response = await callBinary(methodId(name), writer.finish())
+    const response = await callBinary(id, writer.finish())
     const value = read(response)
     response.finish()
     return value
 }
 
-const noArgs = () => {}
-const noResult = () => ({})
+export function readWireBool(reader) {
+    const value = reader.u8()
+    if (value !== 0 && value !== 1) throw new Error('Invalid binary boolean')
+    return value === 1
+}
 
-export function installBinaryBindings(names) {
+export function installBinaryBindings(bindings) {
     if (!window.__APP_BINARY_RPC__) return
-    const direct = {
-        getCounter: getCounterBinary,
-        getPi: getPiBinary,
-        getStatus: getStatusBinary,
-        isReady: isReadyBinary,
-        ping: pingBinary,
-        getVersion: () => callTyped('getVersion', noArgs,
-            response => ({ version: response.string() })),
-        openFile: path => callTyped('openFile', request => request.string(path),
-            response => ({ path: response.string(), status: response.string() })),
-        getConfig: () => callTyped('getConfig', noArgs,
-            response => ({ theme: response.string(), lang: response.string() })),
-        createNativeWindow: bootstrap => callTyped('createNativeWindow',
-            request => writeBootstrap(request, bootstrap), response => response.string()),
-        getBootstrap: windowId => callTyped('getBootstrap',
-            request => request.string(windowId), readBootstrap),
-        postNativeEvent: (windowId, event) => callTyped('postNativeEvent',
-            request => { request.string(windowId); writeOpaque(request, event) }, noResult),
-        closeNativeWindow: windowId => callTyped('closeNativeWindow',
-            request => request.string(windowId), noResult),
-        listNativeWindows: () => callTyped('listNativeWindows', noArgs, readWindowList),
-        startNativeDrag: (windowId, payload) => callTyped('startNativeDrag',
-            request => { request.string(windowId); writeOpaque(request, payload) }, noResult),
-        completeNativeDrag: windowId => callTyped('completeNativeDrag',
-            request => request.string(windowId), response => response.optional(readOpaque)),
-        stopNativeDrag: () => callTyped('stopNativeDrag', noArgs, noResult),
-        completeNativeDragOutside: windowId => callTyped('completeNativeDragOutside',
-            request => request.string(windowId), readOutsideDrop)
-    }
-    for (const name of names) {
-        if (!direct[name]) {
-            throw new Error(`Missing binary codec for ${name}`)
-        }
+    for (const [name, direct] of Object.entries(bindings)) {
+        if (typeof direct !== 'function') throw new TypeError(`Invalid binary binding ${name}`)
         window[name] = async (...args) => {
             try {
-                const data = await direct[name](...args)
+                const data = await direct(...args)
                 return data === null ? { ok: true } : { ok: true, data }
             } catch (error) {
                 return { ok: false, error: {
@@ -321,12 +289,9 @@ export async function getPiBinary() {
 
 export async function isReadyBinary() {
     const response = await callBinary(methodId('isReady'))
-    const value = response.u8()
-    if (value !== 0 && value !== 1) {
-        throw new Error('Invalid binary boolean')
-    }
+    const value = readWireBool(response)
     response.finish()
-    return value === 1
+    return value
 }
 
 export async function getStatusBinary() {

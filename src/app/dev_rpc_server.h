@@ -14,7 +14,8 @@ namespace app {
 // Loopback-only byte endpoint used by Vite's same-origin development proxy.
 class DevRpcServer {
   public:
-    DevRpcServer(webview::webview &window, binary_rpc::Dispatcher dispatcher);
+    DevRpcServer(webview::webview &window, binary_rpc::Dispatcher dispatcher,
+                 int port, std::string expected_origin);
     ~DevRpcServer();
 
     DevRpcServer(const DevRpcServer &) = delete;
@@ -29,6 +30,8 @@ class DevRpcServer {
 
     webview::webview &window_;
     binary_rpc::Dispatcher dispatcher_;
+    int port_;
+    std::string expected_origin_;
     std::string token_;
     std::atomic<bool> stopping_{false};
     std::shared_ptr<std::atomic<bool>> alive_ =

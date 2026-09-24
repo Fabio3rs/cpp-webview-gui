@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { WireReader, WireWriter, echoBytesBinary, getCounterBinary, methodId, installBinaryBindings, installBinaryEventReceiver } from '../src/binary_rpc.js'
 import { decodeCbor, encodeCbor } from '../src/cbor.js'
 import { readBootstrap, readNativeEvent, readOpaque, readOutsideDrop, readWindowList, writeBootstrap, writeOpaque } from '../src/native_wire_types.js'
-import { nativeBindingNames } from '../src/native_binding_names.js'
+import { nativeBindingNames, nativeBindings } from '../src/generated/native-bindings.js'
 import { readFileSync } from 'node:fs'
 
 const rpcConfig = { endpoint: 'app-rpc://native/' }
@@ -19,17 +19,18 @@ test('binary binding names cover the generated C++ registry', () => {
     const path = new URL('../src/generated/native-bindings.json', import.meta.url)
     const index = JSON.parse(readFileSync(path, 'utf8'))
     assert.deepEqual(nativeBindingNames, Object.keys(index).sort())
+    assert.match(index.ping.begin.file, /^\.\.\/src\//)
 })
 
 test('every application binding has a direct wire codec', () => {
     const originalWindow = globalThis.window
     try {
         globalThis.window = { __APP_BINARY_RPC__: rpcConfig }
-        assert.doesNotThrow(() => installBinaryBindings(nativeBindingNames))
+        assert.doesNotThrow(() => installBinaryBindings(nativeBindings))
         for (const name of nativeBindingNames) {
             assert.equal(typeof window[name], 'function')
         }
-        assert.throws(() => installBinaryBindings(['unmapped']), /Missing binary codec/)
+        assert.throws(() => installBinaryBindings({ unmapped: null }), /Invalid binary binding/)
     } finally {
         globalThis.window = originalWindow
     }
@@ -67,7 +68,7 @@ test('config binding uses typed wire values', async () => {
             assert.equal(options.body.byteLength, 0)
             return successResponse(new WireWriter().string('dark').string('pt-br').finish())
         }
-        installBinaryBindings(['getConfig'])
+        installBinaryBindings({ getConfig: nativeBindings.getConfig })
         assert.deepEqual(await window.getConfig(),
             { ok: true, data: { theme: 'dark', lang: 'pt-br' } })
     } finally {
@@ -126,7 +127,7 @@ test('typed handler error retains legacy ok/error result', async () => {
             getBootstrap: () => { throw new Error('legacy binding called') }
         }
         globalThis.fetch = async () => errorResponse(400, 'Bootstrap not found')
-        installBinaryBindings(['getBootstrap'])
+        installBinaryBindings({ getBootstrap: nativeBindings.getBootstrap })
         assert.deepEqual(await window.getBootstrap('missing'), {
             ok: false, error: { code: 400, message: 'Bootstrap not found' }
         })
@@ -247,7 +248,7 @@ test('ping uses typed optional input and struct response', async () => {
             input.finish()
             return successResponse(new WireWriter().string('pong').string('hello').finish())
         }
-        installBinaryBindings(['ping'])
+        installBinaryBindings({ ping: nativeBindings.ping })
         assert.deepEqual(await window.ping('hello'),
             { ok: true, data: { message: 'pong', echo: 'hello' } })
     } finally {
@@ -268,7 +269,7 @@ test('primitive binding uses its direct wire codec', async () => {
             assert.equal(url, `app-rpc://native/${methodId('getCounter')}`)
             return successResponse(new WireWriter().i32(42).finish())
         }
-        installBinaryBindings(['getCounter'])
+        installBinaryBindings({ getCounter: nativeBindings.getCounter })
         assert.deepEqual(await window.getCounter(), { ok: true, data: 42 })
     } finally {
         globalThis.fetch = originalFetch

@@ -3,6 +3,7 @@
 #include "app/binary_rpc_bindings.h"
 #include "app/bindings.h"
 #include "app/bindings_meta.h"
+#include "app/wire_js_emitter.h"
 
 namespace app::bindings {
 
@@ -12,8 +13,13 @@ void bind_typed_with_meta(
     std::source_location begin = std::source_location::current(),
     std::source_location end = std::source_location::current()) {
     bind_typed(w, name, std::forward<F>(func));
-    // registra metadados para geração de .d.ts e índice (começo/fim)
+    // Metadata is collected only by the build-time emitter.
+#if defined(APP_BINDINGS_EMITTER)
     meta::register_binding_meta<F>(name, begin, end);
+#else
+    static_cast<void>(begin);
+    static_cast<void>(end);
+#endif
 }
 
 } // namespace app::bindings
@@ -22,17 +28,24 @@ namespace app::bindings {
 
 template <typename F>
 void bind_typed_with_wire_meta(
-    webview::webview &w, binary_rpc::Dispatcher *binary,
+    webview::webview *w, binary_rpc::Dispatcher *binary,
     const std::string &name, F &&func,
     std::source_location begin = std::source_location::current(),
     std::source_location end = std::source_location::current()) {
     using Callable = std::decay_t<F>;
     Callable callable(std::forward<F>(func));
+#if defined(APP_BINDINGS_EMITTER)
+    meta::register_binding_meta<Callable>(
+        name, begin, end,
+        binary_rpc::emit_wire_binding<Callable>(binary_rpc::method_id(name)));
+#else
+    static_cast<void>(begin);
+    static_cast<void>(end);
+#endif
     if (binary) {
-        meta::register_binding_meta<Callable>(name, begin, end);
         binary_rpc::bind_wire(*binary, name, callable);
-    } else {
-        bind_typed_with_meta(w, name, callable, begin, end);
+    } else if (w) {
+        bind_typed(*w, name, callable);
     }
 }
 

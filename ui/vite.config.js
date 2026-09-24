@@ -4,6 +4,20 @@ import vue from "@vitejs/plugin-vue"
 import { realpathSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 
+function devPort(name, fallback) {
+  const value = process.env[name]
+  if (value === undefined) return fallback
+  const port = Number(value)
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(`${name} must be a port between 1 and 65535`)
+  }
+  return port
+}
+
+const vitePort = devPort('APP_VITE_PORT', 5173)
+const rpcPort = devPort('APP_RPC_PORT', 5174)
+if (vitePort === rpcPort) throw new Error('APP_VITE_PORT and APP_RPC_PORT must differ')
+
 const uiRoot = realpathSync(fileURLToPath(new URL(".", import.meta.url)))
   .replaceAll("\\", "/").toLowerCase()
 let rootHash = 2166136261
@@ -40,11 +54,11 @@ export default defineConfig(({ mode }) => ({
 	clearScreen: false, // não esconder erros do backend C++
 	server: {
 		host: "127.0.0.1",   // WebView acessa fácil
-		port: 5173,
+		port: vitePort,
 		strictPort: true,    // falha se porta ocupada (app nativo precisa saber a porta)
 		proxy: {
 			'/__native_rpc': {
-				target: 'http://127.0.0.1:5174',
+				target: `http://127.0.0.1:${rpcPort}`,
 				changeOrigin: true,
 				rewrite: path => path.replace(/^\/__native_rpc/, '')
 			}

@@ -1,4 +1,5 @@
-export {};
+export function installNativeBindings(): void;
+export const nativeBindingNames: string[];
 
 declare global {
   type NativeBindingResult<T> = { ok: true; data?: T } | { ok: false; error: { code: number; message: string } };

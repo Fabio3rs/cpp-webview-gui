@@ -11,7 +11,7 @@ C++ desktop application using webview, Vue 3, and typed binary RPC between JavaS
 - Sanitizers in debug builds
 - Automatic dependency detection
 
-## Binary RPC prototype
+## Binary RPC
 
 Production builds expose an in-process binary endpoint: WebKitGTK and
 WKWebView use `app-rpc://native/<method-id>`, while WebView2 intercepts
@@ -41,20 +41,20 @@ opaque CBOR. The page fetches each event after a small JavaScript notification
 containing only its numeric token. Production pages register binary handlers
 directly and install their typed JS functions without registering JSON bindings.
 
-In development, Vite keeps serving the UI and HMR at `127.0.0.1:5173`.
+In development, Vite serves the UI and HMR at `127.0.0.1:5173` by default.
 Its `/__native_rpc/` proxy forwards byte requests to the native server bound
-only to `127.0.0.1:5174`; the host injects a fresh token into trusted WebViews.
+only to `127.0.0.1:5174` by default; the host injects a fresh token into trusted WebViews.
 Named bindings and native events use the same typed binary wire in both modes.
-Requests without the token are rejected. The native port is fixed, like the
-Vite port, so another process using 5174 must be stopped before starting the app.
+Requests without the token are rejected. Set `APP_VITE_PORT` and `APP_RPC_PORT`
+to choose different loopback ports; both Vite and the native host read the same
+variables. The ports must differ.
 Production startup fails if binary transport cannot be installed;
 the event queue does not fall back to textual payloads when full. Real
 WebView integration tests exercise binary requests on Linux, Windows, and macOS.
-The two standalone example method IDs for byte
-echo and integer addition remain manually assigned. The JS list of named
-bindings is still maintained separately from C++ metadata; its test detects
-drift. Named IDs are derived from binding names and checked for collisions at
-startup.
+The two standalone example method IDs for byte echo and integer addition
+remain manually assigned. Named bindings use IDs derived from their names;
+the build generates their JavaScript wrappers, names, and TypeScript declarations
+from the C++ binding registry. Dispatcher registration checks ID collisions.
 Pages loaded from a caller-supplied `--url` do not receive native bindings,
 including in development. A development window is privileged only when it
 loads the configured Vite origin. Auxiliary windows receive bindings only when
@@ -100,8 +100,10 @@ so it favors the old bridge.
 │   ├── lib.cpp             # Library code
 │   ├── dev_server.h       # Vite dev server management
 │   └── app/
-│       ├── application.h   # Main application class
-│       ├── bindings.h      # JS ↔ C++ bindings
+│       ├── application.h   # Desktop host lifecycle
+│       ├── app_bindings.h  # Application RPC entry point
+│       ├── handlers.h      # Example methods and handlers
+│       ├── native_window_bindings.h # Framework window RPC
 │       ├── cli_options.h   # CLI option definitions
 │       └── config.h        # App configuration
 ├── ui/                     # Vue 3 frontend
@@ -109,8 +111,11 @@ so it favors the old bridge.
 │   ├── package.json
 │   ├── vite.config.js
 │   └── src/
-│       ├── App.vue         # Main Vue component
-│       ├── main.js         # Vue app entry
+│       ├── App.vue         # Small UI entry point
+│       ├── demo/DockviewDemo.vue # Full sample UI
+│       ├── app_setup.js    # Application Vue setup
+│       ├── main.js         # Reusable Vue/native runtime entry
+│       ├── native_window_runtime.js # Framework window glue
 │       └── style.css       # Global styles
 ├── tests/                  # GoogleTest unit tests
 │   ├── CMakeLists.txt
@@ -164,6 +169,22 @@ cmake --build build
 ```
 
 The app automatically starts the Vite dev server if not running. Changes in `ui/src/` are reflected immediately.
+
+### Where to edit this template
+
+- Add application RPC methods in `src/app/handlers.h` and register them from
+  `src/app/app_bindings.h`. `src/app/native_window_bindings.h` contains the
+  reusable window API. The build-time emitter calls the same registration
+  function without starting a WebView.
+- Edit `ui/src/App.vue` for your UI and `ui/src/app_setup.js` for Vue plugins.
+  The Dockview sample lives in `ui/src/demo/DockviewDemo.vue`; generated RPC wrappers live in
+  `ui/src/generated/`.
+- Run `cmake --build build` after changing a C++ binding. The build regenerates
+  JavaScript and TypeScript declarations. `cd ui && npm run typecheck` checks
+  frontend JS against those declarations; `npm run build` runs that check too.
+- For concurrent dev workspaces, launch with matching ports, for example
+  `APP_VITE_PORT=5183 APP_RPC_PORT=5184 ./build/bin/app --dev`. The app starts
+  Vite with those values. Use the same variables if you start Vite manually.
 
 ### Production Build
 
@@ -276,17 +297,26 @@ APP_BIND_TYPED_WIRE(w, binary, "greet", [](const std::string &name) {
 });
 ```
 
-Add its encoder and decoder to `installBinaryBindings()` in
-`ui/src/binary_rpc.js`, then add its name to `ui/src/native_binding_names.js`:
+Building the C++ project generates `ui/src/generated/native-bindings.js` and
+`native-bindings.d.ts`. No JavaScript method list or per-method wrapper needs
+editing. For a simple aggregate DTO, declare its ordered fields once:
 
-```javascript
-greet: name => callTyped('greet', request => request.string(name),
-    response => response.string())
+```cpp
+struct Greeting { std::string message; };
+
+template <> struct app::binary_rpc::WireFields<Greeting> {
+    static constexpr auto fields() {
+        return std::make_tuple(
+            app::binary_rpc::wire_field("message", &Greeting::message));
+    }
+};
 ```
 
-The C++ binding registry generates the TypeScript declaration. For custom
-structs, add a C++ `WireCodec<T>` and matching JS writer/reader. Both DEV and
-production use that same binary contract.
+The same field list drives the native codec, generated JS codec, and TypeScript
+shape. Supported members include booleans, 32-bit integers, doubles, strings,
+bytes, optional values, vectors, and other described structs. Types with a
+special wire layout, such as `WindowBootstrap` with opaque Dockview extras,
+can supply custom codecs. Both DEV and production use the same binary contract.
 
 ```javascript
 // Call from Vue
@@ -350,18 +380,15 @@ Frontend calls C++ via `window.ping()`:
 window.ping(message)
 ```
 
-```cpp
-// In bindings.h
-webview.bind("ping", [](const std::string& req) {
-    return response;
-});
-```
+`APP_BIND_TYPED_WIRE` in `src/app/handlers.h` registers the typed C++ handler.
+`emit_native_bindings` generates the JavaScript wrapper during the CMake build;
+`ui/src/binary_rpc.js` only handles the transport and wire primitives.
 
 ### Dev Server Management
 
 In development mode, the app automatically manages the Vite server:
 
-- Checks if server is running on port 5173
+- Checks the configured Vite port (`APP_VITE_PORT`, default 5173)
 - Starts `npm run dev` if not running
 - Waits for server to be ready
 - Terminates server on exit if it started it
@@ -420,7 +447,7 @@ sudo pacman -S webkit2gtk-4.1
 ### Vite dev server not starting
 
 If the app hangs:
-1. Check if port 5173 is in use
+1. Check if the configured Vite port (default 5173) is in use
 2. Try starting Vite manually: `cd ui && npm run dev`
 3. Check npm errors
 

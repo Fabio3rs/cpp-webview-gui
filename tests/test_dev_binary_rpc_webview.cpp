@@ -37,7 +37,9 @@ TEST(DevBinaryRpc, ViteProxyTransfersTypedBytes) {
     dispatcher.bind(app::binary_rpc::method_id("getCounter"),
                     [](auto &, auto &out) { out.i32(42); });
     ASSERT_TRUE(app::binary_rpc::install_transport(*window, {}));
-    app::DevRpcServer server(*window, std::move(dispatcher));
+    const auto ports = app::dev_ports::get();
+    app::DevRpcServer server(*window, std::move(dispatcher), ports.rpc,
+                             app::dev_ports::vite_origin(ports));
     ASSERT_TRUE(server.start());
 
     std::string result = "timeout";

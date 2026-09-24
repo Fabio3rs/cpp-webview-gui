@@ -2,9 +2,10 @@
 
 #include "app/bindings_meta.h"
 #include "app/wire_codec.h"
+#include "app/wire_js_emitter.h"
 
-#include <optional>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <utility>
 #include <variant>
@@ -19,10 +20,8 @@ struct OpaqueValue {
     std::variant<binary_rpc::Bytes, bindings::json> storage;
 
     OpaqueValue() : storage(binary_rpc::Bytes{cbor_null}) {}
-    explicit OpaqueValue(binary_rpc::Bytes bytes)
-        : storage(std::move(bytes)) {}
-    explicit OpaqueValue(bindings::json value)
-        : storage(std::move(value)) {}
+    explicit OpaqueValue(binary_rpc::Bytes bytes) : storage(std::move(bytes)) {}
+    explicit OpaqueValue(bindings::json value) : storage(std::move(value)) {}
 };
 
 struct VersionInfo {
@@ -129,14 +128,17 @@ template <> struct JsConv<app::WindowBootstrap> {
         }
         app::WindowBootstrap out;
         auto extras = value;
-        auto read_string = [&](const char *key, std::optional<std::string> &field) {
-            if (auto it = value.find(key); it != value.end() && it->is_string()) {
+        auto read_string = [&](const char *key,
+                               std::optional<std::string> &field) {
+            if (auto it = value.find(key);
+                it != value.end() && it->is_string()) {
                 field = it->get<std::string>();
                 extras.erase(key);
             }
         };
         auto read_number = [&](const char *key, std::optional<double> &field) {
-            if (auto it = value.find(key); it != value.end() && it->is_number()) {
+            if (auto it = value.find(key);
+                it != value.end() && it->is_number()) {
                 field = it->get<double>();
                 extras.erase(key);
             }
@@ -157,13 +159,20 @@ template <> struct JsConv<app::WindowBootstrap> {
         if (!out.is_object()) {
             out = json::object();
         }
-        if (value.window_id) out["windowId"] = *value.window_id;
-        if (value.title) out["title"] = *value.title;
-        if (value.url) out["url"] = *value.url;
-        if (value.width) out["width"] = *value.width;
-        if (value.height) out["height"] = *value.height;
-        if (value.left) out["left"] = *value.left;
-        if (value.top) out["top"] = *value.top;
+        if (value.window_id)
+            out["windowId"] = *value.window_id;
+        if (value.title)
+            out["title"] = *value.title;
+        if (value.url)
+            out["url"] = *value.url;
+        if (value.width)
+            out["width"] = *value.width;
+        if (value.height)
+            out["height"] = *value.height;
+        if (value.left)
+            out["left"] = *value.left;
+        if (value.top)
+            out["top"] = *value.top;
         return out;
     }
 };
@@ -188,7 +197,8 @@ template <> struct JsConv<app::OutsideDrop> {
         return out;
     }
     static json to_json(const app::OutsideDrop &value) {
-        json out = {{"payload", JsConv<app::OpaqueValue>::to_json(value.payload)}};
+        json out = {
+            {"payload", JsConv<app::OpaqueValue>::to_json(value.payload)}};
         if (value.drop) {
             out["drop"] = JsConv<app::DropPoint>::to_json(*value.drop);
         }
@@ -203,29 +213,12 @@ namespace app::bindings::meta {
 template <> struct TsType<app::OpaqueValue> {
     static std::string name() { return "unknown"; }
 };
-template <> struct TsType<app::VersionInfo> {
-    static std::string name() { return "{ version: string }"; }
-};
-template <> struct TsType<app::FileOpenInfo> {
-    static std::string name() {
-        return "{ path: string; status: string }";
-    }
-};
-template <> struct TsType<app::ConfigInfo> {
-    static std::string name() { return "{ theme: string; lang: string }"; }
-};
-template <> struct TsType<app::NativeWindowInfo> {
-    static std::string name() { return "{ id: string; title: string }"; }
-};
 template <> struct TsType<app::WindowBootstrap> {
     static std::string name() {
         return "{ [key: string]: unknown; windowId?: string; title?: string; "
                "url?: string; width?: number; height?: number; left?: number; "
                "top?: number }";
     }
-};
-template <> struct TsType<app::DropPoint> {
-    static std::string name() { return "{ x: number; y: number }"; }
 };
 template <> struct TsType<app::OutsideDrop> {
     static std::string name() {
@@ -252,40 +245,33 @@ template <> struct WireCodec<app::OpaqueValue> {
     }
 };
 
-template <> struct WireCodec<app::VersionInfo> {
-    static app::VersionInfo read(Reader &reader) { return {reader.string()}; }
-    static void write(Writer &writer, const app::VersionInfo &value) {
-        writer.string(value.version);
+template <> struct WireFields<app::VersionInfo> {
+    static constexpr auto fields() {
+        return std::make_tuple(
+            wire_field("version", &app::VersionInfo::version));
     }
 };
 
-template <> struct WireCodec<app::FileOpenInfo> {
-    static app::FileOpenInfo read(Reader &reader) {
-        return {reader.string(), reader.string()};
-    }
-    static void write(Writer &writer, const app::FileOpenInfo &value) {
-        writer.string(value.path);
-        writer.string(value.status);
+template <> struct WireFields<app::FileOpenInfo> {
+    static constexpr auto fields() {
+        return std::make_tuple(
+            wire_field("path", &app::FileOpenInfo::path),
+            wire_field("status", &app::FileOpenInfo::status));
     }
 };
 
-template <> struct WireCodec<app::ConfigInfo> {
-    static app::ConfigInfo read(Reader &reader) {
-        return {reader.string(), reader.string()};
-    }
-    static void write(Writer &writer, const app::ConfigInfo &value) {
-        writer.string(value.theme);
-        writer.string(value.lang);
+template <> struct WireFields<app::ConfigInfo> {
+    static constexpr auto fields() {
+        return std::make_tuple(wire_field("theme", &app::ConfigInfo::theme),
+                               wire_field("lang", &app::ConfigInfo::lang));
     }
 };
 
-template <> struct WireCodec<app::NativeWindowInfo> {
-    static app::NativeWindowInfo read(Reader &reader) {
-        return {reader.string(), reader.string()};
-    }
-    static void write(Writer &writer, const app::NativeWindowInfo &value) {
-        writer.string(value.id);
-        writer.string(value.title);
+template <> struct WireFields<app::NativeWindowInfo> {
+    static constexpr auto fields() {
+        return std::make_tuple(
+            wire_field("id", &app::NativeWindowInfo::id),
+            wire_field("title", &app::NativeWindowInfo::title));
     }
 };
 
@@ -314,24 +300,44 @@ template <> struct WireCodec<app::WindowBootstrap> {
     }
 };
 
-template <> struct WireCodec<app::DropPoint> {
-    static app::DropPoint read(Reader &reader) {
-        return {reader.f64(), reader.f64()};
-    }
-    static void write(Writer &writer, const app::DropPoint &value) {
-        writer.f64(value.x);
-        writer.f64(value.y);
+template <> struct WireFields<app::DropPoint> {
+    static constexpr auto fields() {
+        return std::make_tuple(wire_field("x", &app::DropPoint::x),
+                               wire_field("y", &app::DropPoint::y));
     }
 };
 
-template <> struct WireCodec<app::OutsideDrop> {
-    static app::OutsideDrop read(Reader &reader) {
-        return {WireCodec<app::OpaqueValue>::read(reader),
-                WireCodec<std::optional<app::DropPoint>>::read(reader)};
+template <> struct WireFields<app::OutsideDrop> {
+    static constexpr auto fields() {
+        return std::make_tuple(
+            wire_field("payload", &app::OutsideDrop::payload),
+            wire_field("drop", &app::OutsideDrop::drop));
     }
-    static void write(Writer &writer, const app::OutsideDrop &value) {
-        WireCodec<app::OpaqueValue>::write(writer, value.payload);
-        WireCodec<std::optional<app::DropPoint>>::write(writer, value.drop);
+};
+
+template <> struct JsWire<app::OpaqueValue> {
+    static std::string write(std::string_view writer, std::string_view value) {
+        return "writeOpaque(" + std::string(writer) + ", " +
+               std::string(value) + ");";
+    }
+    static std::string read(std::string_view reader) {
+        return "readOpaque(" + std::string(reader) + ")";
+    }
+};
+
+template <> struct JsWire<app::WindowBootstrap> {
+    static std::string write(std::string_view writer, std::string_view value) {
+        return "writeBootstrap(" + std::string(writer) + ", " +
+               std::string(value) + ");";
+    }
+    static std::string read(std::string_view reader) {
+        return "readBootstrap(" + std::string(reader) + ")";
+    }
+};
+
+template <> struct JsWire<app::OutsideDrop> {
+    static std::string read(std::string_view reader) {
+        return "readOutsideDrop(" + std::string(reader) + ")";
     }
 };
 
