@@ -25,10 +25,24 @@ namespace app::binary_rpc {
 }
 
 template <typename F, std::size_t... I>
+constexpr bool has_borrowed_input_impl(std::index_sequence<I...>) {
+    using Traits = bindings::function_traits<F>;
+    return (false || ... ||
+            std::is_same_v<std::decay_t<typename Traits::template arg<I>>,
+                           BinaryView>);
+}
+
+template <typename F>
+constexpr bool has_borrowed_input_v = has_borrowed_input_impl<F>(
+    std::make_index_sequence<bindings::function_traits<F>::arity>{});
+
+template <typename F, std::size_t... I>
 void bind_wire_impl(Dispatcher &dispatcher, std::string_view name, F func,
                     std::index_sequence<I...>) {
     using Traits = bindings::function_traits<F>;
     using Result = typename Traits::result_type;
+    static_assert(!std::is_same_v<std::decay_t<Result>, BinaryView>,
+                  "BinaryView is an input-only wire type");
     dispatcher.bind(method_id(name), [callable = std::move(func)](
                                          Reader &reader, Writer &writer) {
         // Braced initialization decodes arguments in wire order.

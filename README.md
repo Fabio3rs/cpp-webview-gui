@@ -23,6 +23,8 @@ Window settings, results, and errors have fixed wire layouts. Variable
 Dockview state and arbitrary event payloads are carried as opaque CBOR bytes:
 the native RPC handlers store or forward them without constructing a JSON DOM.
 The generated `echoBytes` example carries raw bytes without JSON or base64.
+Its `BinaryView` argument borrows the request buffer for the duration of the
+synchronous handler; handlers that retain input use owning `Bytes` instead.
 The transport accepts
 at most 16 MiB per message. Direct typed calls use little-endian integers and
 a 32-bit byte length for strings and byte arrays. The C++ and JS codecs also
@@ -321,6 +323,9 @@ shape. Supported members include booleans, 32-bit integers, doubles, strings,
 bytes, optional values, vectors, and other described structs. Types with a
 special wire layout, such as `WindowBootstrap` with opaque Dockview extras,
 can supply custom codecs. Both DEV and production use the same binary contract.
+For a bulk input that is consumed during the call, use `binary_rpc::BinaryView`;
+the generated TypeScript argument remains `Uint8Array`. Copy it into
+`binary_rpc::Bytes` before storing it or handing it to asynchronous work.
 
 ```javascript
 // Call from Vue

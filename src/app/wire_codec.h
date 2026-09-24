@@ -76,6 +76,10 @@ template <> struct WireCodec<Bytes> {
     }
 };
 
+template <> struct WireCodec<BinaryView> {
+    static BinaryView read(Reader &reader) { return {reader.bytes()}; }
+};
+
 template <typename T> struct WireCodec<std::optional<T>> {
     static std::optional<T> read(Reader &reader) {
         if (!WireCodec<bool>::read(reader)) {

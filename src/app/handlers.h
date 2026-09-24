@@ -95,8 +95,10 @@ inline void setup(webview::webview *w, const HandlerRegistry &handlers,
 
     // Example bulk payload and checked arithmetic use the same generated
     // contract as every other application binding.
-    APP_BIND_TYPED_WIRE(w, binary, "echoBytes",
-                        [](const binary_rpc::Bytes &bytes) { return bytes; });
+    APP_BIND_TYPED_WIRE(
+        w, binary, "echoBytes", [](binary_rpc::BinaryView view) {
+            return binary_rpc::Bytes(view.bytes.begin(), view.bytes.end());
+        });
     APP_BIND_TYPED_WIRE(
         w, binary, "addI32", [](std::int32_t left, std::int32_t right) {
             const auto sum = static_cast<std::int64_t>(left) +

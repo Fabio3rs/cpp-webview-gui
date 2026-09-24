@@ -15,6 +15,13 @@
 namespace app::binary_rpc {
 
 using Bytes = std::vector<std::uint8_t>;
+
+// Borrows a byte payload from the current request. Valid only while the
+// synchronous RPC handler is running; copy to Bytes before retaining it.
+struct BinaryView {
+    std::span<const std::uint8_t> bytes;
+};
+
 constexpr std::size_t max_message_size = std::size_t{16} * 1024 * 1024;
 constexpr unsigned bits_per_byte = 8;
 constexpr unsigned word_bits = 32;

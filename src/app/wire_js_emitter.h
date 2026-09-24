@@ -51,6 +51,11 @@ template <> struct JsWire<double> : JsWirePrimitive<PrimitiveWire::f64> {};
 template <>
 struct JsWire<std::string> : JsWirePrimitive<PrimitiveWire::string> {};
 template <> struct JsWire<Bytes> : JsWirePrimitive<PrimitiveWire::bytes> {};
+template <> struct JsWire<BinaryView> {
+    static std::string write(std::string_view writer, std::string_view value) {
+        return JsWire<Bytes>::write(writer, value);
+    }
+};
 
 template <> struct JsWire<bool> {
     static std::string write(std::string_view writer, std::string_view value) {

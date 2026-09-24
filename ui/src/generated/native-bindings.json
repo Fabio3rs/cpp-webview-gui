@@ -3,12 +3,12 @@
     "begin": {
       "column": 10,
       "file": "../src/app/handlers.h",
-      "line": 109
+      "line": 111
     },
     "end": {
       "column": 10,
       "file": "../src/app/handlers.h",
-      "line": 109
+      "line": 111
     }
   },
   "closeNativeWindow": {
@@ -61,14 +61,14 @@
   },
   "echoBytes": {
     "begin": {
-      "column": 77,
+      "column": 10,
       "file": "../src/app/handlers.h",
-      "line": 99
+      "line": 101
     },
     "end": {
-      "column": 77,
+      "column": 10,
       "file": "../src/app/handlers.h",
-      "line": 99
+      "line": 101
     }
   },
   "getBootstrap": {

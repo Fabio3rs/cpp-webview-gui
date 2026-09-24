@@ -88,6 +88,9 @@ template <typename T> struct TsType<std::vector<T>> {
 template <> struct TsType<binary_rpc::Bytes> {
     static std::string name() { return "Uint8Array"; }
 };
+template <> struct TsType<binary_rpc::BinaryView> {
+    static std::string name() { return "Uint8Array"; }
+};
 
 template <binary_rpc::HasWireFields T> struct TsType<T> {
     static std::string name() {

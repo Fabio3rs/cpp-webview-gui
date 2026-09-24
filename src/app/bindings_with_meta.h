@@ -5,6 +5,8 @@
 #include "app/bindings_meta.h"
 #include "app/wire_js_emitter.h"
 
+#include <stdexcept>
+
 namespace app::bindings {
 
 template <typename F>
@@ -45,7 +47,11 @@ void bind_typed_with_wire_meta(
     if (binary) {
         binary_rpc::bind_wire(*binary, name, callable);
     } else if (w) {
-        bind_typed(*w, name, callable);
+        if constexpr (binary_rpc::has_borrowed_input_v<Callable>) {
+            throw std::logic_error("BinaryView requires binary RPC transport");
+        } else {
+            bind_typed(*w, name, callable);
+        }
     }
 }
 

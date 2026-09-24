@@ -49,6 +49,28 @@ TEST(BinaryBindings, ExampleMethodsShareTheGeneratedNameBasedIds) {
     EXPECT_NO_THROW(echo_reader.finish());
 }
 
+TEST(BinaryBindings, BinaryViewBorrowsTheRequestBuffer) {
+    app::binary_rpc::Dispatcher dispatcher;
+    const app::binary_rpc::Bytes payload{0, 255, 17, 42};
+    app::binary_rpc::Writer request;
+    request.bytes(payload);
+    const auto encoded = std::move(request).take();
+    const auto *expected_data = encoded.data() + sizeof(std::uint32_t);
+
+    app::binary_rpc::bind_wire(
+        dispatcher, "inspectBytes",
+        [expected_data](app::binary_rpc::BinaryView view) -> std::uint32_t {
+            EXPECT_EQ(view.bytes.data(), expected_data);
+            EXPECT_EQ(view.bytes.size(), 4U);
+            return static_cast<std::uint32_t>(view.bytes.size());
+        });
+    const auto result =
+        dispatcher.call(app::binary_rpc::method_id("inspectBytes"), encoded);
+    app::binary_rpc::Reader reader(result);
+    EXPECT_EQ(reader.u32(), payload.size());
+    EXPECT_NO_THROW(reader.finish());
+}
+
 TEST(BinaryBindings, AdditionRejectsOverflow) {
     app::binary_rpc::Dispatcher dispatcher;
     app::HandlerRegistry handlers;
