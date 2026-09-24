@@ -1,6 +1,6 @@
 # C++ WebView GUI with Vue 3
 
-C++ desktop application using webview for cross-platform GUI, Vue 3 for the frontend, and nlohmann/json for JSON parsing.
+C++ desktop application using webview, Vue 3, and typed binary RPC between JavaScript and C++.
 
 ## Features
 
@@ -41,8 +41,13 @@ opaque CBOR. The page fetches each event after a small JavaScript notification
 containing only its numeric token. Production pages register binary handlers
 directly and install their typed JS functions without registering JSON bindings.
 
-Vite pages have a different origin and remain on the existing JSON bridge in
-development. Production startup fails if binary transport cannot be installed;
+In development, Vite keeps serving the UI and HMR at `127.0.0.1:5173`.
+Its `/__native_rpc/` proxy forwards byte requests to the native server bound
+only to `127.0.0.1:5174`; the host injects a fresh token into trusted WebViews.
+Named bindings and native events use the same typed binary wire in both modes.
+Requests without the token are rejected. The native port is fixed, like the
+Vite port, so another process using 5174 must be stopped before starting the app.
+Production startup fails if binary transport cannot be installed;
 the event queue does not fall back to textual payloads when full. Real
 WebView integration tests exercise binary requests on Linux, Windows, and macOS.
 The two standalone example method IDs for byte
@@ -262,20 +267,30 @@ Benefits:
 
 ### Adding JS ↔ C++ Bindings
 
-Bindings are defined in `src/app/bindings.h`:
+Register a typed method in `src/app/handlers.h` (or in the application's
+`setup_bindings()` function). Primitives and strings already have wire codecs:
 
 ```cpp
-// Add binding
-webview.bind("my_function", [](const std::string& request) -> std::string {
-    auto json = nlohmann::json::parse(request);
-    // Process request
-    return nlohmann::json{{"result", "ok"}}.dump();
+APP_BIND_TYPED_WIRE(w, binary, "greet", [](const std::string &name) {
+    return std::string("Hello, ") + name;
 });
 ```
 
+Add its encoder and decoder to `installBinaryBindings()` in
+`ui/src/binary_rpc.js`, then add its name to `ui/src/native_binding_names.js`:
+
+```javascript
+greet: name => callTyped('greet', request => request.string(name),
+    response => response.string())
+```
+
+The C++ binding registry generates the TypeScript declaration. For custom
+structs, add a C++ `WireCodec<T>` and matching JS writer/reader. Both DEV and
+production use that same binary contract.
+
 ```javascript
 // Call from Vue
-const response = await window.my_function({data: "hello"});
+const response = await window.greet('Fabio');
 ```
 
 ### Modifying the Vue UI

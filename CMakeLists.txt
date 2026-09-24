@@ -384,6 +384,10 @@ if(WIN32)
     )
 endif()
 
+if(WIN32)
+    target_link_libraries(${PROJECT_NAME}_lib PRIVATE ws2_32)
+endif()
+
 target_include_directories(${PROJECT_NAME}_lib PUBLIC
     "${CMAKE_SOURCE_DIR}/src"
     "${CMAKE_SOURCE_DIR}/include"

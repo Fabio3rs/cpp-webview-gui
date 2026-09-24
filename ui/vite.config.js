@@ -1,12 +1,38 @@
 import { defineConfig } from "vite"
 import { viteSingleFile } from "vite-plugin-singlefile"
 import vue from "@vitejs/plugin-vue"
+import { realpathSync } from "node:fs"
+import { fileURLToPath } from "node:url"
+
+const uiRoot = realpathSync(fileURLToPath(new URL(".", import.meta.url)))
+  .replaceAll("\\", "/").toLowerCase()
+let rootHash = 2166136261
+for (const byte of Buffer.from(uiRoot, "utf8")) {
+  rootHash = Math.imul(rootHash ^ byte, 16777619) >>> 0
+}
+const devIdentityPath = `/__app_dev_identity/${rootHash.toString(16).padStart(8, "0")}`
+
+function devIdentity() {
+  return {
+    name: "app-dev-identity",
+    configureServer(server) {
+      server.middlewares.use((request, response, next) => {
+        if (request.url?.split("?", 1)[0] !== devIdentityPath) {
+          next()
+          return
+        }
+        response.statusCode = 204
+        response.end()
+      })
+    }
+  }
+}
 
 export default defineConfig(({ mode }) => ({
 	// ============================================================================
 	// Plugins
 	// ============================================================================
-	plugins: [vue(), viteSingleFile()],
+	plugins: [vue(), viteSingleFile(), devIdentity()],
 
 	// ============================================================================
 	// Dev Server (para hot reload no WebView)
@@ -16,6 +42,13 @@ export default defineConfig(({ mode }) => ({
 		host: "127.0.0.1",   // WebView acessa fácil
 		port: 5173,
 		strictPort: true,    // falha se porta ocupada (app nativo precisa saber a porta)
+		proxy: {
+			'/__native_rpc': {
+				target: 'http://127.0.0.1:5174',
+				changeOrigin: true,
+				rewrite: path => path.replace(/^\/__native_rpc/, '')
+			}
+		},
 		watch: {
 			// Ignorar arquivos que não são do frontend
 			ignored: ["**/dist/**", "**/*.h"],

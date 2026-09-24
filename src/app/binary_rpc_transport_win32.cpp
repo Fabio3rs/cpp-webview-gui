@@ -336,6 +336,16 @@ bool post_event_bytes(webview::webview &window, Bytes &event) {
     return true;
 }
 
+Bytes take_event_bytes(webview::webview &window, std::uint64_t token) {
+    if (!active_state || !browser_of(window)) return {};
+    auto found = active_state->events.find(token);
+    if (found == active_state->events.end()) return {};
+    Bytes body = std::move(found->second);
+    active_state->pending_event_bytes -= body.size();
+    active_state->events.erase(found);
+    return body;
+}
+
 void load_html_with_binary_origin(webview::webview &window,
                                   const std::string &html) {
     if (!active_state) {

@@ -298,6 +298,22 @@ bool post_event_bytes(webview::webview &window, Bytes &event) {
     return true;
 }
 
+Bytes take_event_bytes(webview::webview &window, std::uint64_t token) {
+    auto handle = window.browser_controller();
+    if (!handle.ok()) return {};
+    auto *view = WEBKIT_WEB_VIEW(handle.value());
+    auto *context = webkit_web_view_get_context(view);
+    auto *state = static_cast<std::shared_ptr<TransportState> *>(
+        g_object_get_data(G_OBJECT(context), context_state_key));
+    if (!state || !g_object_get_data(G_OBJECT(view), authorized_view_key)) return {};
+    auto found = (*state)->events.find(token);
+    if (found == (*state)->events.end()) return {};
+    Bytes body = std::move(found->second);
+    (*state)->pending_event_bytes -= body.size();
+    (*state)->events.erase(found);
+    return body;
+}
+
 bool shares_transport_context(webview::webview &first,
                               webview::webview &second) {
     auto first_handle = first.browser_controller();
@@ -323,6 +339,7 @@ bool shares_transport_context(webview::webview &, webview::webview &) {
 }
 void authorize_view(webview::webview &) {}
 bool post_event_bytes(webview::webview &, Bytes &) { return false; }
+Bytes take_event_bytes(webview::webview &, std::uint64_t) { return {}; }
 void load_html_with_binary_origin(webview::webview &window,
                                   const std::string &html) {
     window.set_html(html);
@@ -338,6 +355,7 @@ bool shares_transport_context(webview::webview &, webview::webview &) {
 }
 void authorize_view(webview::webview &) {}
 bool post_event_bytes(webview::webview &, Bytes &) { return false; }
+Bytes take_event_bytes(webview::webview &, std::uint64_t) { return {}; }
 void load_html_with_binary_origin(webview::webview &window,
                                   const std::string &html) {
     window.set_html(html);

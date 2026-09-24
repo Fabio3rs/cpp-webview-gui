@@ -71,6 +71,10 @@ class WindowManager {
         binary_transport_enabled_ = enabled;
     }
 
+    void set_dev_binary_rpc_token(std::string token) {
+        dev_binary_rpc_token_ = std::move(token);
+    }
+
     std::string create_window(WindowBootstrap bootstrap) {
         std::string window_id = bootstrap.window_id.value_or("");
         if (window_id.empty()) {
@@ -489,7 +493,8 @@ class WindowManager {
                 throw std::runtime_error("Failed to guard child navigation");
             }
             const bool binary_ready =
-                trusted && binary_transport_enabled_ && content_url.empty() &&
+                trusted && binary_transport_enabled_ &&
+                (dev_mode_ || content_url.empty()) &&
                 binary_rpc::shares_transport_context(main_window_, *window);
             if (trusted && binary_transport_enabled_ && !binary_ready) {
                 throw std::runtime_error(
@@ -497,8 +502,13 @@ class WindowManager {
             }
             if (binary_ready) {
                 binary_rpc::authorize_view(*window);
-                window->init("window.__APP_BINARY_RPC__ = { endpoint: '" +
-                             std::string(binary_rpc::rpc_base) + "' };");
+                if (dev_mode_) {
+                    window->init("window.__APP_BINARY_RPC__ = { endpoint: '/__native_rpc/', token: '" +
+                                 dev_binary_rpc_token_ + "' };");
+                } else {
+                    window->init("window.__APP_BINARY_RPC__ = { endpoint: '" +
+                                 std::string(binary_rpc::rpc_base) + "' };");
+                }
             } else if (bindings_setup_ && trusted) {
                 bindings_setup_(*window);
             }
@@ -574,6 +584,7 @@ class WindowManager {
     std::string main_window_id_ = "main";
     std::string main_title_;
     bool binary_transport_enabled_ = false;
+    std::string dev_binary_rpc_token_;
     std::atomic_uint next_id_{1};
 
     std::mutex mu_;

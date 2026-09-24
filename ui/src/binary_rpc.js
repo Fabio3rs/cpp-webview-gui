@@ -182,10 +182,14 @@ function rpcEndpoint() {
 
 async function requestBinary(id, request) {
     const endpoint = rpcEndpoint()
+    const token = window.__APP_BINARY_RPC__?.token
     const response = await fetch(`${endpoint}${id}`, {
         method: 'POST',
         body: request,
-        headers: { 'Content-Type': 'application/octet-stream' }
+        headers: {
+            'Content-Type': 'application/octet-stream',
+            ...(token ? { 'X-App-Rpc-Token': token } : {})
+        }
     })
     if (!response.ok) {
         const error = new Error(await response.text())
@@ -224,7 +228,9 @@ export function installBinaryEventReceiver() {
     window.__APP_NATIVE_EVENT__ = token => {
         pending = pending.then(async () => {
             const response = await fetch(`${rpcEndpoint()}event/${token}`, {
-                method: 'GET', cache: 'no-store'
+                method: 'GET', cache: 'no-store',
+                headers: window.__APP_BINARY_RPC__?.token
+                    ? { 'X-App-Rpc-Token': window.__APP_BINARY_RPC__.token } : {}
             })
             if (!response.ok) throw new Error(`Native event ${response.status}`)
             const reader = new WireReader(new Uint8Array(await response.arrayBuffer()))

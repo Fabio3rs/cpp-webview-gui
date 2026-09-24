@@ -7,7 +7,11 @@
 #include <csignal>
 #include <cstdlib>
 #include <cstring>
+#include <cstdint>
+#include <filesystem>
+#include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -60,10 +64,32 @@ struct ServerProcess {
 };
 
 // =============================================================================
-// Health check - verifica se o servidor está respondendo
+// Identifica o Vite deste workspace antes de confiar na porta de desenvolvimento.
 // =============================================================================
 
-inline bool is_server_responding(const std::string &host, int port) {
+enum class ServerProbe { Unavailable, Expected, Other };
+
+inline std::string identity_path(const std::string &working_dir) {
+    std::error_code error;
+    const auto canonical = std::filesystem::weakly_canonical(working_dir, error);
+    std::string path = error ? working_dir : canonical.generic_string();
+    std::uint32_t hash = 2166136261u;
+    for (char character : path) {
+        auto byte = static_cast<unsigned char>(character);
+        if (byte == '\\')
+            byte = '/';
+        if (byte >= 'A' && byte <= 'Z')
+            byte = static_cast<unsigned char>(byte - 'A' + 'a');
+        hash = (hash ^ byte) * 16777619u;
+    }
+    std::ostringstream result;
+    result << "/__app_dev_identity/" << std::hex << std::setw(8)
+           << std::setfill('0') << hash;
+    return result.str();
+}
+
+inline ServerProbe probe_server(const ServerConfig &cfg) {
+    const auto path = identity_path(cfg.working_dir);
 #ifdef _WIN32
     // Windows: usa WinHTTP
     HINTERNET session =
@@ -71,41 +97,49 @@ inline bool is_server_responding(const std::string &host, int port) {
                     WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
 
     if (!session)
-        return false;
+        return ServerProbe::Unavailable;
 
-    std::wstring whost(host.begin(), host.end());
+    std::wstring whost(cfg.host.begin(), cfg.host.end());
+    std::wstring wpath(path.begin(), path.end());
     HINTERNET connect = WinHttpConnect(session, whost.c_str(),
-                                       static_cast<INTERNET_PORT>(port), 0);
+                                       static_cast<INTERNET_PORT>(cfg.port), 0);
 
     if (!connect) {
         WinHttpCloseHandle(session);
-        return false;
+        return ServerProbe::Unavailable;
     }
 
     HINTERNET request =
-        WinHttpOpenRequest(connect, L"GET", L"/", nullptr, WINHTTP_NO_REFERER,
+        WinHttpOpenRequest(connect, L"GET", wpath.c_str(), nullptr, WINHTTP_NO_REFERER,
                            WINHTTP_DEFAULT_ACCEPT_TYPES, 0);
 
     if (!request) {
         WinHttpCloseHandle(connect);
         WinHttpCloseHandle(session);
-        return false;
+        return ServerProbe::Unavailable;
     }
 
     bool success = WinHttpSendRequest(request, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
                                       WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
                    WinHttpReceiveResponse(request, nullptr);
+    DWORD status = 0;
+    DWORD status_size = sizeof(status);
+    success = success && WinHttpQueryHeaders(
+        request, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+        WINHTTP_HEADER_NAME_BY_INDEX, &status, &status_size,
+        WINHTTP_NO_HEADER_INDEX);
 
     WinHttpCloseHandle(request);
     WinHttpCloseHandle(connect);
     WinHttpCloseHandle(session);
 
-    return success;
+    return success ? (status == 204 ? ServerProbe::Expected : ServerProbe::Other)
+                   : ServerProbe::Unavailable;
 #else
     // POSIX: socket simples
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0)
-        return false;
+        return ServerProbe::Unavailable;
 
     // Timeout de conexão
     struct timeval tv;
@@ -116,37 +150,41 @@ inline bool is_server_responding(const std::string &host, int port) {
 
     struct sockaddr_in serv_addr {};
     serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(static_cast<uint16_t>(port));
+    serv_addr.sin_port = htons(static_cast<uint16_t>(cfg.port));
 
-    if (inet_pton(AF_INET, host.c_str(), &serv_addr.sin_addr) <= 0) {
+    if (inet_pton(AF_INET, cfg.host.c_str(), &serv_addr.sin_addr) <= 0) {
         close(sockfd);
-        return false;
+        return ServerProbe::Unavailable;
     }
 
-    bool connected =
+    const bool connected =
         (connect(sockfd, reinterpret_cast<struct sockaddr *>(&serv_addr),
                  sizeof(serv_addr)) == 0);
 
+    ServerProbe result = ServerProbe::Unavailable;
     if (connected) {
-        // Envia request HTTP básico
-        const char *request =
-            "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
-        send(sockfd, request, strlen(request), 0);
-
-        // Lê resposta
-        char buffer[256];
-        ssize_t bytes = recv(sockfd, buffer, sizeof(buffer) - 1, 0);
-        if (bytes > 0) {
-            buffer[bytes] = '\0';
-            // Verifica se é HTTP response válido
-            connected = (strstr(buffer, "HTTP/") != nullptr);
+        const std::string request = "GET " + path +
+                                    " HTTP/1.1\r\nHost: " + cfg.host +
+                                    "\r\nConnection: close\r\n\r\n";
+        if (send(sockfd, request.data(), request.size(), 0) > 0) {
+            char buffer[256]{};
+            const ssize_t bytes = recv(sockfd, buffer, sizeof(buffer) - 1, 0);
+            if (bytes > 0) {
+                const std::string_view response(buffer, static_cast<std::size_t>(bytes));
+                result = response.starts_with("HTTP/1.1 204") ||
+                                 response.starts_with("HTTP/1.0 204")
+                             ? ServerProbe::Expected
+                             : ServerProbe::Other;
+            } else {
+                result = ServerProbe::Other;
+            }
         } else {
-            connected = false;
+            result = ServerProbe::Other;
         }
     }
 
     close(sockfd);
-    return connected;
+    return result;
 #endif
 }
 
@@ -285,7 +323,15 @@ inline void stop_server(ServerProcess &proc) {
 inline bool ensure_server_running(const ServerConfig &cfg,
                                   ServerProcess &proc) {
     // 1. Já tem algo respondendo?
-    if (is_server_responding(cfg.host, cfg.port)) {
+    const auto initial_probe = probe_server(cfg);
+    if (initial_probe == ServerProbe::Other) {
+        std::cerr << "[DEV] A porta " << cfg.port
+                  << " está ocupada por outro servidor ou projeto Vite."
+                  << std::endl;
+        proc.state = ServerState::Failed;
+        return false;
+    }
+    if (initial_probe == ServerProbe::Expected) {
         std::cout << "[DEV] Servidor já está rodando em " << cfg.dev_url
                   << std::endl;
         proc.state = ServerState::Running;
@@ -306,7 +352,17 @@ inline bool ensure_server_running(const ServerConfig &cfg,
     auto start = std::chrono::steady_clock::now();
     int dots = 0;
 
-    while (!is_server_responding(cfg.host, cfg.port)) {
+    while (true) {
+        const auto probe = probe_server(cfg);
+        if (probe == ServerProbe::Expected)
+            break;
+        if (probe == ServerProbe::Other) {
+            std::cerr << "\n[DEV] A porta " << cfg.port
+                      << " não pertence ao Vite deste workspace." << std::endl;
+            proc.state = ServerState::Failed;
+            stop_server(proc);
+            return false;
+        }
         auto elapsed = std::chrono::steady_clock::now() - start;
         if (elapsed > cfg.timeout) {
             std::cerr << "\n[DEV] Timeout: servidor não respondeu em "

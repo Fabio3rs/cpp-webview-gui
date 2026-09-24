@@ -41,6 +41,9 @@ void clear_transport(webview::webview &window);
 void authorize_view(webview::webview &window);
 // Queues bytes for one application page and signals it with a small JS token.
 [[nodiscard]] bool post_event_bytes(webview::webview &window, Bytes &event);
+// Consumes a queued event for the development loopback endpoint.
+[[nodiscard]] Bytes take_event_bytes(webview::webview &window,
+                                     std::uint64_t token);
 void load_html_with_binary_origin(webview::webview &window,
                                   const std::string &html);
 

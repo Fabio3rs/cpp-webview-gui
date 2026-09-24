@@ -41,6 +41,16 @@ if(UNIX AND NOT APPLE)
         target_compile_options(binary_rpc_webview_tests PRIVATE ${PROJECT_WARNING_FLAGS})
         add_test(NAME binary_rpc_webview
             COMMAND ${XVFB_RUN_EXECUTABLE} -a $<TARGET_FILE:binary_rpc_webview_tests>)
+
+        add_executable(dev_binary_rpc_webview_tests test_dev_binary_rpc_webview.cpp)
+        target_link_libraries(dev_binary_rpc_webview_tests PRIVATE
+            ${PROJECT_NAME}_lib GTest::gtest_main)
+        target_compile_definitions(dev_binary_rpc_webview_tests PRIVATE
+            APP_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+        target_compile_options(dev_binary_rpc_webview_tests PRIVATE ${PROJECT_WARNING_FLAGS})
+        add_test(NAME dev_binary_rpc_webview
+            COMMAND ${XVFB_RUN_EXECUTABLE} -a $<TARGET_FILE:dev_binary_rpc_webview_tests>)
+        set_tests_properties(dev_binary_rpc_webview PROPERTIES TIMEOUT 60)
     endif()
 endif()
 
@@ -64,6 +74,6 @@ endif()
 # the pure C++ tests still run with unsuppressed leak detection.
 if(XVFB_RUN_EXECUTABLE AND ENABLE_SANITIZERS AND
    EXISTS "${LSAN_SUPPRESSIONS_DST}")
-    set_tests_properties(binary_rpc_webview binary_rpc_platform PROPERTIES
+    set_tests_properties(binary_rpc_webview binary_rpc_platform dev_binary_rpc_webview PROPERTIES
         ENVIRONMENT "LSAN_OPTIONS=suppressions=${LSAN_SUPPRESSIONS_DST}")
 endif()

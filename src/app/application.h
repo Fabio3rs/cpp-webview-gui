@@ -8,6 +8,7 @@
 #include "app/binary_rpc_transport.h"
 #include "app/binding_policy.h"
 #include "app/config.h"
+#include "app/dev_rpc_server.h"
 #include "app/handlers.h"
 #include "app/navigation_guard.h"
 #include "app/navigation_policy.h"
@@ -42,6 +43,7 @@ class Application {
           verbose_(opts.verbose) {}
 
     ~Application() {
+        dev_rpc_server_.reset();
         if (window_) {
             binary_rpc::clear_transport(*window_);
         }
@@ -181,8 +183,20 @@ class Application {
                     "Failed to guard privileged navigation");
             }
 #if defined(__linux__) || defined(_WIN32) || defined(__APPLE__)
-            if (dev_mode_) {
-                setup_bindings(*window_);
+            if (dev_mode_ && should_install_bindings(options_.url)) {
+                setup_bindings(*window_, &binary_rpc);
+                if (!binary_rpc::install_transport(*window_, {})) {
+                    throw std::runtime_error("Binary event transport unavailable");
+                }
+                dev_rpc_server_ = std::make_unique<DevRpcServer>(
+                    *window_, std::move(binary_rpc));
+                if (!dev_rpc_server_->start()) {
+                    throw std::runtime_error("Development RPC port 5174 unavailable");
+                }
+                window_->init("window.__APP_BINARY_RPC__ = { endpoint: '/__native_rpc/', token: '" +
+                              dev_rpc_server_->token() + "' };");
+                window_manager_->set_dev_binary_rpc_token(dev_rpc_server_->token());
+                window_manager_->set_binary_transport_enabled(true);
             } else if (should_install_bindings(options_.url)) {
                 setup_bindings(*window_, &binary_rpc);
                 const bool binary_ready = binary_rpc::install_transport(
@@ -374,6 +388,7 @@ class Application {
     app::HandlerRegistry handlers_;
     std::unique_ptr<webview::webview> window_;
     std::unique_ptr<WindowManager> window_manager_;
+    std::unique_ptr<DevRpcServer> dev_rpc_server_;
 };
 
 } // namespace app
