@@ -362,8 +362,8 @@ void DevRpcServer::handle_client(std::uintptr_t raw_socket) {
             return;
         }
         auto result = future.get();
-        reply(socket, event_request && result.empty() ? 404 : 200,
-              std::move(result));
+        const int status = event_request && result.empty() ? 404 : 200;
+        reply(socket, status, std::move(result));
     } catch (const std::exception &) {
         reply(socket, 500);
     }
