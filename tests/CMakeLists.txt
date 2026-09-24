@@ -33,9 +33,16 @@ target_compile_options(binary_rpc_tests PRIVATE ${PROJECT_WARNING_FLAGS})
 gtest_discover_tests(binary_rpc_tests)
 
 # Run frontend checks through the same CTest entry point as the native tests.
-add_test(NAME ui_binary_wire COMMAND ${NPM_EXECUTABLE} run test:binary)
+# On Windows, npm is a .cmd shim. CTest starts processes directly and cannot
+# execute the extensionless path returned by find_program(npm).
+if(WIN32)
+    set(UI_NPM_TEST_COMMAND cmd.exe /d /c npm.cmd)
+else()
+    set(UI_NPM_TEST_COMMAND "${NPM_EXECUTABLE}")
+endif()
+add_test(NAME ui_binary_wire COMMAND ${UI_NPM_TEST_COMMAND} run test:binary)
 set_tests_properties(ui_binary_wire PROPERTIES WORKING_DIRECTORY "${UI_DIR}")
-add_test(NAME ui_typecheck COMMAND ${NPM_EXECUTABLE} run typecheck)
+add_test(NAME ui_typecheck COMMAND ${UI_NPM_TEST_COMMAND} run typecheck)
 set_tests_properties(ui_typecheck PROPERTIES WORKING_DIRECTORY "${UI_DIR}")
 
 if(UNIX AND NOT APPLE)
