@@ -291,6 +291,29 @@ set(UI_DIST_HTML "${UI_DIST_DIR}/index.html")
 set(UI_EMBEDDED_CPP "${CMAKE_BINARY_DIR}/generated/index_html_embedded.cpp")
 set(UI_EMBEDDED_H "${CMAKE_BINARY_DIR}/generated/index_html_embedded.h")
 
+# Both the Vite dev server and the production bundle need the same locked npm
+# dependencies. npm creates this file inside node_modules; using it as the
+# output also makes a deleted node_modules directory trigger installation again.
+find_program(NPM_EXECUTABLE npm REQUIRED)
+option(UI_NPM_IGNORE_SCRIPTS
+    "Skip npm dependency lifecycle scripts during the UI install" OFF)
+set(UI_NPM_INSTALL_ARGS ci --no-audit --no-fund)
+if(UI_NPM_IGNORE_SCRIPTS)
+    list(APPEND UI_NPM_INSTALL_ARGS --ignore-scripts)
+endif()
+set(UI_NODE_MODULES_LOCK "${UI_DIR}/node_modules/.package-lock.json")
+add_custom_command(
+    OUTPUT "${UI_NODE_MODULES_LOCK}"
+    COMMAND ${NPM_EXECUTABLE} ${UI_NPM_INSTALL_ARGS}
+    COMMAND ${CMAKE_COMMAND} -E touch "${UI_NODE_MODULES_LOCK}"
+    WORKING_DIRECTORY "${UI_DIR}"
+    DEPENDS "${UI_DIR}/package.json" "${UI_DIR}/package-lock.json"
+            "${UI_DIR}/tools/native-bindings-plugin/package.json"
+    COMMENT "Installing locked UI dependencies..."
+    VERBATIM
+)
+add_custom_target(ui_dependencies DEPENDS "${UI_NODE_MODULES_LOCK}")
+
 # ==============================================================================
 # Build do UI (apenas em modo produção)
 # ==============================================================================
@@ -304,19 +327,12 @@ if(NOT DEV_MODE)
         ${UI_SRC_FILES}
     )
 
-    # Detectar npm
-    find_program(NPM_EXECUTABLE npm)
-    if(NOT NPM_EXECUTABLE)
-        message(FATAL_ERROR "npm não encontrado! Necessário para build de produção.")
-    endif()
-
     # Step 1: Build do UI com Vite (gera dist/index.html)
     add_custom_command(
         OUTPUT "${UI_DIST_HTML}"
-        COMMAND ${NPM_EXECUTABLE} install --silent
         COMMAND ${NPM_EXECUTABLE} run build
         WORKING_DIRECTORY "${UI_DIR}"
-        DEPENDS ${UI_SOURCES}
+        DEPENDS ${UI_SOURCES} "${UI_NODE_MODULES_LOCK}"
         COMMENT "Building UI com Vite..."
         VERBATIM
     )
@@ -463,6 +479,7 @@ endif()
 
 # Linka contra a lib do projeto (herda includes e dependências)
 target_link_libraries(app PRIVATE ${PROJECT_NAME}_lib)
+add_dependencies(app ui_dependencies)
 if(WIN32)
     target_link_libraries(app PRIVATE shell32)
 endif()

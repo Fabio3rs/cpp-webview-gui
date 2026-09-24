@@ -42,14 +42,6 @@ jobs:
           cache: 'npm'
           cache-dependency-path: ui/package-lock.json
 
-      - name: Install UI dependencies
-        run: npm install
-        working-directory: ui
-
-      - name: Test binary JS codecs
-        run: npm run test:binary
-        working-directory: ui
-
       - name: Configure CMake (Dev Mode)
         run: |
           cmake -B build -G Ninja \
@@ -140,10 +132,6 @@ jobs:
           cache: 'npm'
           cache-dependency-path: ui/package-lock.json
 
-      - name: Install UI dependencies
-        run: npm install
-        working-directory: ui
-
       - name: Show clang version
         run: |
           which clang++
@@ -200,10 +188,6 @@ jobs:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: ui/package-lock.json
-
-      - name: Install UI dependencies
-        run: npm install
-        working-directory: ui
 
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1

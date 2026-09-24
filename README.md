@@ -41,7 +41,7 @@ secondary windows share the dispatcher. Native events use fixed binary tags
 for window and drag control messages; arbitrary forwarded JS payloads remain
 opaque CBOR. The page fetches each event after a small JavaScript notification
 containing only its numeric token. Production pages register binary handlers
-directly and install their typed JS functions without registering JSON bindings.
+directly and install their generated typed JS functions.
 
 In development, Vite serves the UI and HMR at `127.0.0.1:5173` by default.
 Its `/__native_rpc/` proxy forwards byte requests to the native server bound
@@ -74,16 +74,15 @@ authorized WebView and rejects an explicitly foreign `Origin`.
 
 `tests/test_binary_rpc_webview.cpp` exercises a real WebKitGTK page with a
 15 MiB request and response, typed struct calls, a one-shot binary event, and a
-second WebView in the same context. Run it with `ctest --test-dir build` on a machine
-with Xvfb. The JS wire tests run with `cd ui && npm run test:binary`.
+second WebView in the same context. Run the full suite with
+`ctest --test-dir build --output-on-failure`; Linux WebView tests need Xvfb.
+CTest also runs the JavaScript wire tests and TypeScript declaration check.
 `tests/test_binary_rpc_platform.cpp` runs the same real `fetch` path on Linux,
 Windows, and macOS, including a 15 MiB round trip, an error envelope, and a
 typed native event.
-For timing comparisons, build `bench_binary_rpc` with sanitizers disabled and
-run it under Xvfb. It reports small call latency and 1 MiB JSON/base64 versus
-binary round trips; results depend on the installed WebKit and machine.
-The legacy bulk baseline echoes base64 without decoding it on the C++ side,
-so it favors the old bridge.
+For timing comparisons on Linux, build `bench_binary_rpc` with sanitizers
+disabled and run it under Xvfb. Its historical text/base64 comparison is a
+benchmark fixture; application RPC uses the typed binary bridge.
 
 ## Project Structure
 
@@ -149,7 +148,8 @@ so it favors the old bridge.
 
 The build system detects and uses system libraries when available:
 
-- nlohmann/json - Falls back to FetchContent if not installed
+- nlohmann/json - Used for generated metadata and opaque compatibility values;
+  named RPC methods use typed binary codecs. Falls back to FetchContent.
 - WebKitGTK - Auto-detects version (6.0 → 4.1 → 4.0)
 
 ## Quick Start
@@ -157,20 +157,22 @@ The build system detects and uses system libraries when available:
 ### Development Mode
 
 ```bash
-# Install UI dependencies (first time only)
-cd ui && npm install && cd ..
-
 # Configure for development
 cmake -B build -G Ninja -DDEV_MODE=ON
 
-# Build
+# Build C++, install locked UI dependencies, and generate JS/TS bindings
 cmake --build build
+
+# Native, JavaScript wire, and TypeScript checks
+ctest --test-dir build --output-on-failure
 
 # Run
 ./build/bin/app --dev
 ```
 
-The app automatically starts the Vite dev server if not running. Changes in `ui/src/` are reflected immediately.
+The build runs `npm ci` from `ui/package-lock.json` when UI dependencies are
+missing or the manifest changes. The app starts Vite when needed; changes in
+`ui/src/` appear immediately.
 
 ### Where to edit this template
 
@@ -182,8 +184,8 @@ The app automatically starts the Vite dev server if not running. Changes in `ui/
   The Dockview sample lives in `ui/src/demo/DockviewDemo.vue`; generated RPC wrappers live in
   `ui/src/generated/`.
 - Run `cmake --build build` after changing a C++ binding. The build regenerates
-  JavaScript and TypeScript declarations. `cd ui && npm run typecheck` checks
-  frontend JS against those declarations; `npm run build` runs that check too.
+  JavaScript and TypeScript declarations. `ctest --test-dir build
+  --output-on-failure` checks the JS wire and declarations with the native tests.
 - For concurrent dev workspaces, launch with matching ports, for example
   `APP_VITE_PORT=5183 APP_RPC_PORT=5184 ./build/bin/app --dev`. The app starts
   Vite with those values. Use the same variables if you start Vite manually.
@@ -196,6 +198,9 @@ cmake -B build -G Ninja -DDEV_MODE=OFF
 
 # Build (automatically builds UI)
 cmake --build build
+
+# Verify native and UI contracts
+ctest --test-dir build --output-on-failure
 
 # Run
 ./build/bin/app
@@ -246,6 +251,8 @@ COMP_LINE="app --" COMP_POINT=7 ./build/bin/app
 | FETCH_GTEST | ON | Download GoogleTest if not found |
 | ENABLE_SANITIZERS | ON (Debug) | Enable ASAN/UBSAN/LSAN |
 | ENABLE_WARNINGS | ON | Enable compiler warnings |
+| SHOULD_AUTO_EMIT_BINDINGS | ON | Generate JS/TS bindings from C++ registrations |
+| UI_NPM_IGNORE_SCRIPTS | OFF | Skip npm dependency install scripts (opt in) |
 | FETCHCONTENT_QUIET | ON | Show FetchContent download progress |
 
 ```bash
@@ -254,7 +261,14 @@ cmake -B build -DDEV_MODE=OFF -DENABLE_SANITIZERS=OFF -DCMAKE_BUILD_TYPE=Release
 
 # Verbose dependency download
 cmake -B build -DFETCHCONTENT_QUIET=OFF
+
+# Optional: install UI packages without dependency install scripts
+cmake -B build -DUI_NPM_IGNORE_SCRIPTS=ON
 ```
+
+The default lets packages such as esbuild run their install checks. With
+`UI_NPM_IGNORE_SCRIPTS=ON`, npm still installs platform specific optional
+packages; Vite and the UI checks in CTest must pass on each target platform.
 
 ### Dependency Caching
 
@@ -264,11 +278,8 @@ FetchContent dependencies are cached in `.deps/`:
 - Shallow clones for faster downloads
 - System library detection
 
-To force re-download:
-```bash
-rm -rf .deps
-cmake -B build
-```
+For UI dependency changes, update `ui/package-lock.json` with npm; the next
+CMake build installs the locked versions. Native dependencies stay in `.deps/`.
 
 ### UI Embedding
 
@@ -284,7 +295,7 @@ Benefits:
 - Portable across compilers/platforms
 - No MSVC string literal limits
 - Automatic rebuild on UI changes
-- No runtime dependencies
+- No separate UI asset directory at runtime
 
 ## Customization
 
@@ -348,7 +359,8 @@ ui/src/
 └── style.css        # Global styles
 ```
 
-Changes in `ui/src/` are reflected immediately without rebuilding.
+Changes in `ui/src/` are reflected immediately. After changing a C++ binding,
+run `cmake --build build` to regenerate the JS/TS contract.
 
 ### Integrating C++ Libraries
 
@@ -435,9 +447,11 @@ Does not match the generator used previously: Unix Makefiles
 
 Solution:
 ```bash
-rm -rf .deps/*-build .deps/*-subbuild
-cmake -B build -G Ninja
+cmake -S . -B build-ninja -G Ninja
 ```
+
+Use the new build directory for subsequent `cmake --build` and `ctest` calls.
+The generator is fixed for each CMake build directory.
 
 ### WebKitGTK not found (Linux)
 
@@ -457,8 +471,8 @@ sudo pacman -S webkit2gtk-4.1
 
 If the app hangs:
 1. Check if the configured Vite port (default 5173) is in use
-2. Try starting Vite manually: `cd ui && npm run dev`
-3. Check npm errors
+2. Run `cmake --build build` to install the locked UI dependencies
+3. Check npm errors; `cd ui && npm run dev` is available for direct Vite debugging
 
 ### ASAN leak reports
 

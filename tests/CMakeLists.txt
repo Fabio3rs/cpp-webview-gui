@@ -32,6 +32,12 @@ target_link_libraries(binary_rpc_tests PRIVATE ${PROJECT_NAME}_lib GTest::gtest_
 target_compile_options(binary_rpc_tests PRIVATE ${PROJECT_WARNING_FLAGS})
 gtest_discover_tests(binary_rpc_tests)
 
+# Run frontend checks through the same CTest entry point as the native tests.
+add_test(NAME ui_binary_wire COMMAND ${NPM_EXECUTABLE} run test:binary)
+set_tests_properties(ui_binary_wire PROPERTIES WORKING_DIRECTORY "${UI_DIR}")
+add_test(NAME ui_typecheck COMMAND ${NPM_EXECUTABLE} run typecheck)
+set_tests_properties(ui_typecheck PROPERTIES WORKING_DIRECTORY "${UI_DIR}")
+
 if(UNIX AND NOT APPLE)
     find_program(XVFB_RUN_EXECUTABLE xvfb-run)
     if(XVFB_RUN_EXECUTABLE)
@@ -48,6 +54,7 @@ if(UNIX AND NOT APPLE)
         target_compile_definitions(dev_binary_rpc_webview_tests PRIVATE
             APP_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
         target_compile_options(dev_binary_rpc_webview_tests PRIVATE ${PROJECT_WARNING_FLAGS})
+        add_dependencies(dev_binary_rpc_webview_tests ui_dependencies)
         add_test(NAME dev_binary_rpc_webview
             COMMAND ${XVFB_RUN_EXECUTABLE} -a $<TARGET_FILE:dev_binary_rpc_webview_tests>)
         set_tests_properties(dev_binary_rpc_webview PROPERTIES TIMEOUT 60)
