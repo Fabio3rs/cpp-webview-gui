@@ -33,10 +33,17 @@ target_compile_options(binary_rpc_tests PRIVATE ${PROJECT_WARNING_FLAGS})
 gtest_discover_tests(binary_rpc_tests)
 
 # Run frontend checks through the same CTest entry point as the native tests.
-# On Windows, npm is a .cmd shim. CTest starts processes directly and cannot
-# execute the extensionless path returned by find_program(npm).
+# On Windows, npm is a .cmd shim. CTest starts processes directly, so run its
+# JavaScript entry point with node.exe instead of relying on cmd.exe quoting.
 if(WIN32)
-    set(UI_NPM_TEST_COMMAND cmd.exe /d /c npm.cmd)
+    find_program(UI_NODE_EXECUTABLE NAMES node.exe REQUIRED)
+    get_filename_component(UI_NPM_BIN_DIR "${NPM_EXECUTABLE}" DIRECTORY)
+    get_filename_component(UI_NODE_BIN_DIR "${UI_NODE_EXECUTABLE}" DIRECTORY)
+    find_file(UI_NPM_CLI_JS NAMES npm-cli.js
+        PATHS "${UI_NPM_BIN_DIR}/node_modules/npm/bin"
+              "${UI_NODE_BIN_DIR}/node_modules/npm/bin"
+        NO_DEFAULT_PATH REQUIRED)
+    set(UI_NPM_TEST_COMMAND "${UI_NODE_EXECUTABLE}" "${UI_NPM_CLI_JS}")
 else()
     set(UI_NPM_TEST_COMMAND "${NPM_EXECUTABLE}")
 endif()
