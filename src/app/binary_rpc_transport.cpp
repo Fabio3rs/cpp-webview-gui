@@ -26,6 +26,12 @@ constexpr std::size_t max_pending_event_bytes = std::size_t{32} * 1024 * 1024;
 constexpr const char *context_state_key = "app-binary-rpc-transport";
 constexpr const char *authorized_view_key = "app-binary-rpc-authorized";
 
+struct GObjectUnref {
+    void operator()(gpointer object) const noexcept {
+        g_object_unref(object);
+    }
+};
+
 struct TransportState {
     Dispatcher dispatcher;
     std::map<std::uint64_t, Bytes> events;
@@ -128,7 +134,8 @@ void on_request(WebKitURISchemeRequest *request, gpointer data) {
     }
 
     Bytes body;
-    auto *stream = webkit_uri_scheme_request_get_http_body(request);
+    std::unique_ptr<GInputStream, GObjectUnref> stream(
+        webkit_uri_scheme_request_get_http_body(request));
     if (stream) {
         if (headers) {
             const auto length = soup_message_headers_get_content_length(headers);
@@ -145,7 +152,7 @@ void on_request(WebKitURISchemeRequest *request, gpointer data) {
         while (true) {
             GError *error = nullptr;
             const auto count = g_input_stream_read(
-                stream, chunk.data(), chunk.size(), nullptr, &error);
+                stream.get(), chunk.data(), chunk.size(), nullptr, &error);
             if (count < 0) {
                 g_clear_error(&error);
                 finish(request, {}, HttpStatus::bad_request,

@@ -58,3 +58,12 @@ if(WIN32 OR APPLE OR XVFB_RUN_EXECUTABLE)
     endif()
     set_tests_properties(binary_rpc_platform PROPERTIES TIMEOUT 45)
 endif()
+
+# GTK/WebKit allocate process-lifetime caches during real WebView tests.
+# Keep these suppressions scoped to the tests that instantiate a WebView;
+# the pure C++ tests still run with unsuppressed leak detection.
+if(XVFB_RUN_EXECUTABLE AND ENABLE_SANITIZERS AND
+   EXISTS "${LSAN_SUPPRESSIONS_DST}")
+    set_tests_properties(binary_rpc_webview binary_rpc_platform PROPERTIES
+        ENVIRONMENT "LSAN_OPTIONS=suppressions=${LSAN_SUPPRESSIONS_DST}")
+endif()
